@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SkillGap Analyzer Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; display: flex; gap: 30px; }
+        .sidebar { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 220px; height: fit-content; flex-shrink: 0; }
+        .sidebar h3 { margin-top: 0; color: #333; }
+        .sidebar a { display: block; margin: 10px 0; padding: 10px; background: #0056b3; color: white; text-decoration: none; border-radius: 4px; text-align: center; font-size: 14px;}
+        .sidebar a:hover { background: #004494; }
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; gap: 20px; max-width: 1000px; }
+        .dashboard-card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .dashboard-card h2 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .controls { background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
+        .controls select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; }
+        .controls button { background: #28a745; color: white; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; }
+        .controls button:hover { background: #218838; }
+        .btn-card { background: #17a2b8; color: white; padding: 8px 15px; border-radius: 4px; text-decoration: none; font-size: 14px; display: inline-block;}
+        .btn-card:hover { background: #138496; }
+        .chart-container-bar { width: 100%; height: 300px; }
+        .chart-container-radar { width: 100%; max-width: 500px; margin: auto; }
+        .no-data { text-align: center; color: #666; font-style: italic; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h3>Menu</h3>
+        <a href="{% url 'add_designation' %}">+ Add Designation</a>
+        <a href="{% url 'add_benchmark' %}">+ Add Benchmark</a>
+        <a href="{% url 'add_employee' %}">+ Add Employee</a>
+        <a href="{% url 'add_employee_skill' %}">+ Record Skill</a>
+    </div>
+
+    <div class="main-content">
+        <div class="dashboard-card">
+            <h2>1. Complete Team Overview</h2>
+            <p>Average skill levels across all employees compared to their respective benchmarks.</p>
+            {% if team_labels != "[]" %}
+                <div class="chart-container-bar"><canvas id="teamChart"></canvas></div>
+            {% else %}
+                <p class="no-data">No skill data available for the team yet.</p>
+            {% endif %}
+        </div>
+
+        <div class="dashboard-card">
+            <h2>2. Designation Analysis</h2>
+            <form class="controls" method="GET" action="{% url 'dashboard' %}">
+                {% if selected_employee %}<input type="hidden" name="employee" value="{{ selected_employee.id }}">{% endif %}
+                <label><strong>Select Role: </strong></label>
+                <select name="designation">
+                    {% for desig in designations %}
+                        <option value="{{ desig.id }}" {% if selected_designation and selected_designation.id == desig.id %}selected{% endif %}>{{ desig.title }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Filter Role</button>
+            </form>
+            {% if desig_labels != "[]" %}
+                <div class="chart-container-bar"><canvas id="designationChart"></canvas></div>
+            {% else %}
+                <p class="no-data">No data available for this designation.</p>
+            {% endif %}
+        </div>
+
+        <div class="dashboard-card">
+            <h2>3. Individual Employee Analysis</h2>
+            <form class="controls" method="GET" action="{% url 'dashboard' %}">
+                {% if selected_designation %}<input type="hidden" name="designation" value="{{ selected_designation.id }}">{% endif %}
+                <label><strong>Select Employee: </strong></label>
+                <select name="employee">
+                    {% for emp in employees %}
+                        <option value="{{ emp.id }}" {% if selected_employee and selected_employee.id == emp.id %}selected{% endif %}>{{ emp.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">View Profile</button>
+                
+                {% if selected_employee %}
+                    <a href="{% url 'employee_card' selected_employee.id %}" target="_blank" class="btn-card">📄 Open Printable Skill Card</a>
+                {% endif %}
+            </form>
+
+            {% if ind_labels != "[]" %}
+                <div class="chart-container-radar"><canvas id="individualChart"></canvas></div>
+            {% else %}
+                <p class="no-data">No data available for this employee.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        const barChartOptions = { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 5, ticks: { stepSize: 1 } } } };
+        const chartColors = { actualBg: 'rgba(54, 162, 235, 0.7)', actualBorder: 'rgba(54, 162, 235, 1)', benchmarkBg: 'rgba(255, 99, 132, 0.7)', benchmarkBorder: 'rgba(255, 99, 132, 1)' };
+
+        if (document.getElementById('teamChart')) {
+            new Chart(document.getElementById('teamChart').getContext('2d'), {
+                type: 'bar', data: { labels: {{ team_labels|safe }}, datasets: [ { label: 'Average Actual', data: {{ team_actual|safe }}, backgroundColor: chartColors.actualBg, borderColor: chartColors.actualBorder, borderWidth: 1 }, { label: 'Average Benchmark', data: {{ team_benchmark|safe }}, backgroundColor: chartColors.benchmarkBg, borderColor: chartColors.benchmarkBorder, borderWidth: 1 } ] }, options: barChartOptions
+            });
+        }
+
+        if (document.getElementById('designationChart')) {
+            new Chart(document.getElementById('designationChart').getContext('2d'), {
+                type: 'bar', data: { labels: {{ desig_labels|safe }}, datasets: [ { label: 'Actual Level', data: {{ desig_actual|safe }}, backgroundColor: chartColors.actualBg, borderColor: chartColors.actualBorder, borderWidth: 1 }, { label: 'Benchmark Required', data: {{ desig_benchmark|safe }}, backgroundColor: chartColors.benchmarkBg, borderColor: chartColors.benchmarkBorder, borderWidth: 1 } ] }, options: barChartOptions
+            });
+        }
+
+        if (document.getElementById('individualChart')) {
+            new Chart(document.getElementById('individualChart').getContext('2d'), {
+                type: 'radar', data: { labels: {{ ind_labels|safe }}, datasets: [ { label: 'Actual Level', data: {{ ind_actual|safe }}, backgroundColor: 'rgba(54, 162, 235, 0.4)', borderColor: chartColors.actualBorder, borderWidth: 2 }, { label: 'Benchmark Required', data: {{ ind_benchmark|safe }}, backgroundColor: 'rgba(255, 99, 132, 0)', borderColor: chartColors.benchmarkBorder, borderWidth: 2, borderDash: [5, 5] } ] }, options: { scales: { r: { beginAtZero: true, max: 5, ticks: { stepSize: 1, backdropColor: 'transparent' } } } }
+            });
+        }
+    </script>
+</body>
+</html>
