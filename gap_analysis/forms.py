@@ -1,5 +1,10 @@
 from django import forms
-from .models import Designation, SkillBenchmark, Employee, EmployeeSkill
+from .models import Designation, SkillBenchmark, Employee, EmployeeSkill, Skill
+
+class SkillForm(forms.ModelForm):
+    class Meta:
+        model = Skill
+        fields = '__all__'
 
 class DesignationForm(forms.ModelForm):
     class Meta:

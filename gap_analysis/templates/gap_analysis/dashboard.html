@@ -28,8 +28,12 @@
         <h3>Menu</h3>
         <a href="{% url 'add_designation' %}">+ Add Designation</a>
         <a href="{% url 'add_benchmark' %}">+ Add Benchmark</a>
+        <a href="{% url 'add_skill' %}">+ Add Skill</a>
         <a href="{% url 'add_employee' %}">+ Add Employee</a>
         <a href="{% url 'add_employee_skill' %}">+ Record Skill</a>
+        <a href="{% url 'skill_list' %}" style="background: #28a745; margin-top: 20px;">Manage Skills</a>
+        <a href="{% url 'employee_list' %}" style="background: #28a745; margin-top: 10px;">Manage Employees</a>
+        <a href="{% url 'designation_list' %}" style="background: #28a745; margin-top: 10px;">Manage Designations</a>
     </div>
 
     <div class="main-content">

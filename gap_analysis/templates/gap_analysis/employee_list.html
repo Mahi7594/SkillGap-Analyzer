@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manage Employees</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #0056b3; color: white; }
+        .btn { padding: 6px 12px; text-decoration: none; border-radius: 4px; color: white; font-size: 14px; }
+        .btn-edit { background-color: #ffc107; color: black; }
+        .btn-delete { background-color: #dc3545; }
+        .btn-add { background-color: #28a745; display: inline-block; margin-bottom: 20px; }
+        .header-flex { display: flex; justify-content: space-between; align-items: center; }
+        .back-link { display: inline-block; margin-top: 20px; text-decoration: none; color: #0056b3; }
+        .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-flex">
+            <h2 style="margin: 0;">Manage Employees</h2>
+            <a href="{% url 'add_employee' %}" class="btn btn-add">+ Add New Employee</a>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Designation</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for employee in employees %}
+                <tr>
+                    <td><strong>{{ employee.name }}</strong></td>
+                    <td>{{ employee.designation.title|default:"-" }}</td>
+                    <td><span class="status-badge" style="background-color: {% if employee.is_active %}#d4edda; color: #155724;{% else %}#f8d7da; color: #721c24;{% endif %}">{{ employee.is_active|yesno:"Active,Inactive" }}</span></td>
+                    <td>
+                        <a href="{% url 'employee_update' employee.id %}" class="btn btn-edit">Edit</a>
+                        <a href="{% url 'employee_delete' employee.id %}" class="btn btn-delete">Delete</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" style="text-align: center; color: #666; font-style: italic;">No employees created yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <a href="{% url 'dashboard' %}" class="back-link">← Back to Dashboard</a>
+    </div>
+</body>
+</html>
