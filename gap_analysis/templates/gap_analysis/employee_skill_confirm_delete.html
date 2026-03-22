@@ -1,24 +1,23 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Delete Assessment</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
-        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: auto; text-align: center; }
-        .btn { padding: 10px 20px; text-decoration: none; border-radius: 4px; color: white; font-size: 16px; border: none; cursor: pointer; margin: 5px; }
-        .btn-delete { background-color: #dc3545; }
-        .btn-cancel { background-color: #6c757d; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2 style="color: #dc3545;">Delete Assessment</h2>
-        <p>Are you sure you want to delete the "<strong>{{ employee_skill.skill.name }}</strong>" assessment record for <strong>{{ employee_skill.employee.name }}</strong>?</p>
-        <form method="POST">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-delete">Yes, Delete Assessment</button>
-            <a href="{% url 'employee_skill_list' %}" class="btn btn-cancel">Cancel</a>
-        </form>
+{% extends 'gap_analysis/base.html' %}
+
+{% block title %}Confirm Deletion | Skill Gap Analyzer{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6">
+        <div class="card border-danger shadow">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle-fill me-2"></i> Confirm Deletion</h5>
+            </div>
+            <div class="card-body text-center py-5">
+                <p class="fs-5">Are you sure you want to permanently delete this record?</p>
+                <form method="POST" class="mt-4">
+                    {% csrf_token %}
+                    <a href="javascript:history.back()" class="btn btn-outline-secondary me-2">Cancel</a>
+                    <button type="submit" class="btn btn-danger">Yes, Delete Record</button>
+                </form>
+            </div>
+        </div>
     </div>
-</body>
-</html>
+</div>
+{% endblock %}

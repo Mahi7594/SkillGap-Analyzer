@@ -1,57 +1,199 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Manage Employees</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
-        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
-        th { background-color: #0056b3; color: white; }
-        .btn { padding: 6px 12px; text-decoration: none; border-radius: 4px; color: white; font-size: 14px; }
-        .btn-edit { background-color: #ffc107; color: black; }
-        .btn-delete { background-color: #dc3545; }
-        .btn-add { background-color: #28a745; display: inline-block; margin-bottom: 20px; }
-        .header-flex { display: flex; justify-content: space-between; align-items: center; }
-        .back-link { display: inline-block; margin-top: 20px; text-decoration: none; color: #0056b3; }
-        .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header-flex">
-            <h2 style="margin: 0;">Manage Employees</h2>
-            <a href="{% url 'add_employee' %}" class="btn btn-add">+ Add New Employee</a>
+{% extends 'gap_analysis/base.html' %}
+
+{% block title %}Skill Matrix - Skill Gap Analyzer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .page-subtitle {
+        color: #64748b;
+        margin-top: 0.25rem;
+    }
+
+    .search-box {
+        position: relative;
+        max-width: 300px;
+    }
+
+    .search-box input {
+        padding-left: 2.5rem;
+    }
+
+    .search-box i {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #94a3b8;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-icon {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+    }
+
+    .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+
+    .table-hover tbody tr:hover {
+        background-color: #f8fafc;
+        transform: scale(1.01);
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-fade-in {
+        animation: fadeInUp 0.5s ease forwards;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">
+                <i class="bi bi-people me-2 text-primary"></i>Skill Matrix
+            </h1>
+            <p class="page-subtitle">Manage your team members and their skill profiles</p>
         </div>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Designation</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for employee in employees %}
-                <tr>
-                    <td><strong>{{ employee.name }}</strong></td>
-                    <td>{{ employee.designation.title|default:"-" }}</td>
-                    <td><span class="status-badge" style="background-color: {% if employee.is_active %}#d4edda; color: #155724;{% else %}#f8d7da; color: #721c24;{% endif %}">{{ employee.is_active|yesno:"Active,Inactive" }}</span></td>
-                    <td>
-                        <a href="{% url 'employee_update' employee.id %}" class="btn btn-edit">Edit</a>
-                        <a href="{% url 'employee_delete' employee.id %}" class="btn btn-delete">Delete</a>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="4" style="text-align: center; color: #666; font-style: italic;">No employees created yet.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <a href="{% url 'dashboard' %}" class="back-link">← Back to Dashboard</a>
+        <a href="{% url 'add_employee' %}" class="btn btn-primary">
+            <i class="bi bi-person-plus me-2"></i>Add Employee
+        </a>
     </div>
-</body>
-</html>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Designation</th>
+                            <th>Status</th>
+                            <th>Skills Recorded</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for employee in employees %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar me-3">
+                                        {{ employee.name|make_list|first|upper }}
+                                    </div>
+                                    <div>
+                                        <strong>{{ employee.name }}</strong>
+                                        {% if employee.email %}
+                                        <br><small class="text-muted">{{ employee.email }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if employee.role_matrix %}
+                                    <span class="badge bg-light text-dark">
+                                        <i class="bi bi-briefcase me-1"></i>{{ employee.role_matrix.title }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if employee.status == 'active' %}
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-check-circle me-1"></i>Active
+                                    </span>
+                                {% elif employee.status == 'on_leave' %}
+                                    <span class="badge bg-warning">
+                                        <i class="bi bi-clock me-1"></i>On Leave
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-danger">
+                                        <i class="bi bi-x-circle me-1"></i>Inactive
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% with employee.employeeskill_set.count as skill_count %}
+                                    <span class="badge" style="background: rgba(79, 70, 229, 0.1); color: #4f46e5;">
+                                        {{ skill_count }} skill{{ skill_count|pluralize }}
+                                    </span>
+                                {% endwith %}
+                            </td>
+                            <td>
+                                <div class="action-buttons justify-content-end">
+                                    <a href="{% url 'employee_profile' employee.id %}" class="btn btn-primary btn-icon" title="View Profile">
+                                        <i class="bi bi-person"></i>
+                                    </a>
+                                    <a href="{% url 'employee_update' employee.id %}" class="btn btn-warning btn-icon" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a href="{% url 'employee_delete' employee.id %}" class="btn btn-danger btn-icon" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5">
+                                <div class="empty-state py-5">
+                                    <i class="bi bi-people d-block"></i>
+                                    <p>No employees found yet.</p>
+                                    <a href="{% url 'add_employee' %}" class="btn btn-primary mt-2">
+                                        <i class="bi bi-plus-circle me-2"></i>Add First Employee
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

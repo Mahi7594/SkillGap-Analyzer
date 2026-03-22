@@ -1,54 +1,120 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Manage Designations</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
-        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
-        th { background-color: #0056b3; color: white; }
-        .btn { padding: 6px 12px; text-decoration: none; border-radius: 4px; color: white; font-size: 14px; }
-        .btn-edit { background-color: #ffc107; color: black; }
-        .btn-delete { background-color: #dc3545; }
-        .btn-add { background-color: #28a745; display: inline-block; margin-bottom: 20px; }
-        .header-flex { display: flex; justify-content: space-between; align-items: center; }
-        .back-link { display: inline-block; margin-top: 20px; text-decoration: none; color: #0056b3; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header-flex">
-            <h2 style="margin: 0;">Manage Designations</h2>
-            <a href="{% url 'add_designation' %}" class="btn btn-add">+ Add New Designation</a>
+{% extends 'gap_analysis/base.html' %}
+
+{% block title %}Manage Designations - Skill Gap Analyzer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .btn-icon {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+    }
+
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">
+                <i class="bi bi-briefcase me-2 text-primary"></i>Role Matrix
+            </h1>
+            <p class="text-muted mt-1">Manage job roles and their required skills (benchmarks)</p>
         </div>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>Designation Title</th>
-                    <th>Department</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for designation in designations %}
-                <tr>
-                    <td><strong>{{ designation.title }}</strong></td>
-                    <td>{{ designation.department|default:"-" }}</td>
-                    <td>
-                        <a href="{% url 'designation_update' designation.id %}" class="btn btn-edit">Edit</a>
-                        <a href="{% url 'designation_delete' designation.id %}" class="btn btn-delete">Delete</a>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="3" style="text-align: center; color: #666; font-style: italic;">No designations created yet.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <a href="{% url 'dashboard' %}" class="back-link">← Back to Dashboard</a>
+        <a href="{% url 'add_designation' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-2"></i>Add Designation
+        </a>
     </div>
-</body>
-</html>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Designation</th>
+                            <th>Department</th>
+                            <th>Required Skills</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for designation in designations %}
+                        <tr>
+                            <td>
+                                <strong>{{ designation.title }}</strong>
+                            </td>
+                            <td>
+                                {% if designation.department %}
+                                    <span class="badge bg-light text-dark">
+                                        <i class="bi bi-building me-1"></i>{{ designation.department }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% with designation.benchmark_set.count as benchmark_count %}
+                                    <span class="badge" style="background: rgba(79, 70, 229, 0.1); color: #4f46e5;">
+                                        {{ benchmark_count }} benchmark{{ benchmark_count|pluralize }}
+                                    </span>
+                                {% endwith %}
+                            </td>
+                            <td>
+                                <div class="d-flex justify-content-end gap-2">
+                                    <a href="{% url 'designation_benchmark' designation.id %}" class="btn btn-info btn-icon" title="Manage Benchmark">
+                                        <i class="bi bi-bookmark-check"></i>
+                                    </a>
+                                    <a href="{% url 'designation_update' designation.id %}" class="btn btn-warning btn-icon" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a href="{% url 'designation_delete' designation.id %}" class="btn btn-danger btn-icon" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4">
+                                <div class="empty-state py-5">
+                                    <i class="bi bi-briefcase d-block"></i>
+                                    <p>No designations found yet.</p>
+                                    <a href="{% url 'add_designation' %}" class="btn btn-primary mt-2">
+                                        <i class="bi bi-plus-circle me-2"></i>Add First Designation
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

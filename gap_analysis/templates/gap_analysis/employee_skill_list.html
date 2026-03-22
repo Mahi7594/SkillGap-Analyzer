@@ -1,0 +1,129 @@
+{% extends 'gap_analysis/base.html' %}
+
+{% block title %}Employee Skills - Skill Gap Analyzer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .btn-icon {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+    }
+
+    .level-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 32px;
+        height: 24px;
+        padding: 0 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .level-0 { background: #f1f5f9; color: #64748b; }
+    .level-1 { background: #dbeafe; color: #1d4ed8; }
+    .level-2 { background: #d1fae5; color: #059669; }
+    .level-3 { background: #fef3c7; color: #d97706; }
+    .level-4 { background: #fed7aa; color: #ea580c; }
+    .level-5 { background: #fee2e2; color: #dc2626; }
+
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">
+                <i class="bi bi-award me-2 text-primary"></i>Employee Skills
+            </h1>
+            <p class="text-muted mt-1">View skill assessments for all employees</p>
+        </div>
+    </div>
+
+    {% if employee_skills %}
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Skill</th>
+                            <th>Actual Level</th>
+                            <th>Last Evaluated</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for es in employee_skills %}
+                        <tr>
+                            <td>
+                                <strong>{{ es.skill_matrix.name }}</strong>
+                                {% if es.skill_matrix.role_matrix %}
+                                    <span class="badge bg-light text-muted ms-2">{{ es.skill_matrix.role_matrix.title }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ es.skill.name }}</strong>
+                                {% if es.skill.category %}
+                                    <span class="badge bg-light text-muted ms-2">{{ es.skill.category }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="level-badge level-{{ es.actual_level }}">{{ es.actual_level }}/5</span>
+                            </td>
+                            <td>{{ es.last_evaluated|date:"M d, Y" }}</td>
+                            <td>
+                                <div class="d-flex justify-content-end gap-2">
+                                    <a href="{% url 'employee_profile' es.skill_matrix.id %}" class="btn btn-info btn-icon" title="View Profile">
+                                        <i class="bi bi-person"></i>
+                                    </a>
+                                    <a href="{% url 'employee_skill_delete' es.id %}" class="btn btn-danger btn-icon" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-inbox"></i>
+        <p>No employee skills recorded yet.</p>
+        <a href="{% url 'add_employee_skill' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-2"></i>Record First Skill
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

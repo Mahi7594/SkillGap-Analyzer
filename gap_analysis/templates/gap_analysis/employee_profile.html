@@ -1,0 +1,508 @@
+{% extends 'gap_analysis/base.html' %}
+
+{% block title %}Employee Profile - {{ employee.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-header {
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        border-radius: 20px;
+        padding: 2rem;
+        color: white;
+        margin-bottom: 2rem;
+    }
+    
+    .profile-avatar {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background: white;
+        color: #4f46e5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        font-weight: 700;
+    }
+    
+    .profile-info h2 {
+        margin-bottom: 0.25rem;
+    }
+    
+    .profile-info .designation {
+        opacity: 0.9;
+        font-size: 1.1rem;
+    }
+    
+    .kpi-row {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+    
+    .kpi-item {
+        background: rgba(255,255,255,0.2);
+        padding: 0.75rem 1.25rem;
+        border-radius: 10px;
+        text-align: center;
+    }
+    
+    .kpi-item .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    
+    .kpi-item .label {
+        font-size: 0.75rem;
+        opacity: 0.9;
+    }
+    
+    .skill-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .skill-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+    
+    .skill-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    
+    .skill-name {
+        font-weight: 600;
+        color: #1e293b;
+    }
+    
+    .skill-category {
+        font-size: 0.75rem;
+        color: #64748b;
+        text-transform: uppercase;
+    }
+    
+    .skill-body {
+        padding: 1rem 1.25rem;
+    }
+    
+    .level-row {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .level-label {
+        min-width: 80px;
+        font-size: 0.875rem;
+        color: #64748b;
+    }
+    
+    .level-bar {
+        flex: 1;
+        height: 10px;
+        background: #e2e8f0;
+        border-radius: 5px;
+        overflow: hidden;
+    }
+    
+    .level-bar-fill {
+        height: 100%;
+        border-radius: 5px;
+        transition: width 0.5s ease;
+    }
+    
+    .level-bar-fill.required {
+        background: linear-gradient(90deg, #ef4444, #f87171);
+    }
+    
+    .level-bar-fill.actual {
+        background: linear-gradient(90deg, #4f46e5, #818cf8);
+    }
+    
+    .level-value {
+        min-width: 30px;
+        text-align: right;
+        font-weight: 600;
+    }
+    
+    .gap-indicator {
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .gap-indicator.met {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+    }
+    
+    .gap-indicator.warning {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+    }
+    
+    .gap-indicator.critical {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+    }
+    
+    .skill-level-input {
+        width: 70px;
+        padding: 0.5rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        text-align: center;
+        font-weight: 600;
+    }
+    
+    .skill-level-input:focus {
+        border-color: #4f46e5;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+    
+    .edit-btn {
+        background: none;
+        border: none;
+        color: #64748b;
+        cursor: pointer;
+        padding: 0.25rem;
+    }
+    
+    .edit-btn:hover {
+        color: #4f46e5;
+    }
+    
+    .chart-container {
+        height: 300px;
+        margin-top: 1rem;
+    }
+    
+    .tabs-nav {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 0.5rem;
+    }
+    
+    .tab-btn {
+        padding: 0.75rem 1.5rem;
+        background: none;
+        border: none;
+        font-weight: 500;
+        color: #64748b;
+        cursor: pointer;
+        border-radius: 8px 8px 0 0;
+        transition: all 0.2s ease;
+    }
+    
+    .tab-btn:hover {
+        background: #f8fafc;
+    }
+    
+    .tab-btn.active {
+        color: #4f46e5;
+        background: #f8fafc;
+        border-bottom: 2px solid #4f46e5;
+    }
+    
+    .tab-content {
+        display: none;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
+    
+    .skill-level-input {
+        width: 60px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+    <!-- Profile Header -->
+    <div class="profile-header">
+        <div class="row align-items-center">
+            <div class="col-auto">
+                <div class="profile-avatar">
+                    {{ employee.name|make_list|first|upper }}
+                </div>
+            </div>
+            <div class="col profile-info">
+                <h2>{{ employee.name }}</h2>
+                <p class="designation">
+                    <i class="bi bi-briefcase me-2"></i>
+                    {{ employee.designation.title|default:"No designation assigned" }}
+                </p>
+                <p class="mb-0">
+                    {% if employee.email %}
+                        <i class="bi bi-envelope me-2"></i>{{ employee.email }}
+                    {% endif %}
+                </p>
+                <div class="kpi-row">
+                    <div class="kpi-item">
+                        <div class="value">{{ skill_data|length }}</div>
+                        <div class="label">Required Skills</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="value">{{ skills_met }}%</div>
+                        <div class="label">Skills Met</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="value">{{ overall_gap|floatformat:1 }}</div>
+                        <div class="label">Avg Gap</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <a href="{% url 'employee_update' employee.id %}" class="btn btn-light">
+                    <i class="bi bi-pencil me-2"></i>Edit Profile
+                </a>
+                <a href="{% url 'employee_card' employee.id %}" class="btn btn-light ms-2" target="_blank">
+                    <i class="bi bi-file-earmark-person me-2"></i>Skill Card
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs-nav">
+        <button class="tab-btn active" onclick="showTab('skills')">
+            <i class="bi bi-list-ul me-2"></i>Skills Assessment
+        </button>
+        <button class="tab-btn" onclick="showTab('chart')">
+            <i class="bi bi-bar-chart me-2"></i>Visualization
+        </button>
+    </div>
+
+    <!-- Skills Tab -->
+    <div id="skills-tab" class="tab-content active">
+        {% if skill_data %}
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 25%;">Skill</th>
+                                    <th style="width: 15%;">Category</th>
+                                    <th style="width: 15%;">Required</th>
+                                    <th style="width: 25%;">Actual Level</th>
+                                    <th style="width: 10%;">Gap</th>
+                                    <th style="width: 10%;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for skill in skill_data %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ skill.skill_name }}</strong>
+                                    </td>
+                                    <td>
+                                        {% if skill.skill_category %}
+                                            <span class="badge bg-light text-dark">{{ skill.skill_category }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold text-danger">{{ skill.required_level }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <input type="number" 
+                                                   class="skill-level-input" 
+                                                   id="skill-{{ skill.skill_id }}"
+                                                   value="{{ skill.actual_level }}" 
+                                                   min="0" 
+                                                   max="5"
+                                                   onchange="updateSkill({{ employee.id }}, {{ skill.skill_id }}, this.value)"
+                                                   style="width: 60px;">
+                                            <div class="progress flex-grow-1" style="height: 8px;">
+                                                <div class="progress-bar bg-primary" id="bar-{{ skill.skill_id }}" style="width: {{ skill.actual_level|add:'-20' }}%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if skill.gap > 0 %}
+                                            <span class="text-danger fw-bold">-{{ skill.gap }}</span>
+                                        {% else %}
+                                            <span class="text-success">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if skill.status == 'met' %}
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check-circle me-1"></i>Met
+                                            </span>
+                                        {% elif skill.status == 'warning' %}
+                                            <span class="badge bg-warning">
+                                                <i class="bi bi-exclamation-triangle me-1"></i>Warning
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-x-circle me-1"></i>Gap
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Summary Cards -->
+            <div class="row mt-4">
+                <div class="col-md-4">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0">{{ skills_met }}%</h3>
+                            <small>Skills Met</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-warning text-white">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0">{{ skill_data|length }}</h3>
+                            <small>Total Skills</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0">{{ overall_gap|floatformat:1 }}</h3>
+                            <small>Avg Gap Score</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <i class="bi bi-clipboard-x"></i>
+                <p>No skill benchmarks defined for this role.</p>
+                <a href="{% url 'designation_list' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-2"></i>Add Benchmarks
+                </a>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Chart Tab -->
+    <div id="chart-tab" class="tab-content">
+        <div class="card">
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="skillRadarChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Tab switching
+    function showTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        
+        document.getElementById(tabId + '-tab').classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    // Update skill level via AJAX
+    function updateSkill(employeeId, skillId, newLevel) {
+        fetch(`/employee/${employeeId}/skill-update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: `skill_id=${skillId}&actual_level=${newLevel}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the progress bar
+                document.getElementById(`bar-${skillId}`).style.width = (data.actual_level * 20) + '%';
+                
+                // Show success feedback
+                const input = document.getElementById(`skill-${skillId}`);
+                input.style.borderColor = '#10b981';
+                setTimeout(() => {
+                    input.style.borderColor = '#e2e8f0';
+                }, 1000);
+                
+                // Optionally reload to update all data
+                // location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to update skill level');
+        });
+    }
+
+    // Radar Chart
+    const ctx = document.getElementById('skillRadarChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: {{ chart_labels|safe }},
+            datasets: [
+                {
+                    label: 'Actual Level',
+                    data: {{ chart_actual|safe }},
+                    backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                    borderColor: 'rgba(79, 70, 229, 1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: 'rgba(79, 70, 229, 1)',
+                },
+                {
+                    label: 'Required Level',
+                    data: {{ chart_required|safe }},
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderColor: 'rgba(239, 68, 68, 1)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointBackgroundColor: 'rgba(239, 68, 68, 1)',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    max: 5,
+                    ticks: { stepSize: 1 },
+                    pointLabels: { font: { size: 12 } }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

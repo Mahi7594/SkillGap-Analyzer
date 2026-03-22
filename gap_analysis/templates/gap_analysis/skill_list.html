@@ -1,54 +1,136 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Manage Skills</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
-        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
-        th { background-color: #0056b3; color: white; }
-        .btn { padding: 6px 12px; text-decoration: none; border-radius: 4px; color: white; font-size: 14px; }
-        .btn-edit { background-color: #ffc107; color: black; }
-        .btn-delete { background-color: #dc3545; }
-        .btn-add { background-color: #28a745; display: inline-block; margin-bottom: 20px; }
-        .header-flex { display: flex; justify-content: space-between; align-items: center; }
-        .back-link { display: inline-block; margin-top: 20px; text-decoration: none; color: #0056b3; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header-flex">
-            <h2 style="margin: 0;">Manage Base Skills</h2>
-            <a href="{% url 'add_skill' %}" class="btn btn-add">+ Add New Skill</a>
+{% extends 'gap_analysis/base.html' %}
+
+{% block title %}Manage Skills - Skill Gap Analyzer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .btn-icon {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+    }
+
+    .skill-category {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.75rem;
+        background: #f1f5f9;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        color: #64748b;
+    }
+
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">
+                <i class="bi bi-lightning me-2 text-primary"></i>Skills & Benchmarks
+            </h1>
+            <p class="text-muted mt-1">Manage base skills and role-specific benchmarks</p>
         </div>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>Skill Name</th>
-                    <th>Category</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for skill in skills %}
-                <tr>
-                    <td><strong>{{ skill.name }}</strong></td>
-                    <td>{{ skill.category|default:"-" }}</td>
-                    <td>
-                        <a href="{% url 'skill_update' skill.id %}" class="btn btn-edit">Edit</a>
-                        <a href="{% url 'skill_delete' skill.id %}" class="btn btn-delete">Delete</a>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="3" style="text-align: center; color: #666; font-style: italic;">No skills created yet.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <a href="{% url 'dashboard' %}" class="back-link">← Back to Dashboard</a>
+        <div class="d-flex gap-2">
+            <a href="{% url 'add_skill' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-2"></i>Add Skill
+            </a>
+            <a href="{% url 'add_benchmark' %}" class="btn btn-success">
+                <i class="bi bi-bookmark-plus me-2"></i>Add Benchmark
+            </a>
+        </div>
     </div>
-</body>
-</html>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>Base Skills</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Skill Name</th>
+                            <th>Category</th>
+                            <th>Used In Benchmarks</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for skill in skills %}
+                        <tr>
+                            <td>
+                                <strong>{{ skill.name }}</strong>
+                            </td>
+                            <td>
+                                {% if skill.category %}
+                                    <span class="skill-category">
+                                        <i class="bi bi-tag"></i>{{ skill.category }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% with skill.benchmark_set.count as benchmark_count %}
+                                    <span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
+                                        {{ benchmark_count }} benchmark{{ benchmark_count|pluralize }}
+                                    </span>
+                                {% endwith %}
+                            </td>
+                            <td>
+                                <div class="d-flex justify-content-end gap-2">
+                                    <a href="{% url 'skill_update' skill.id %}" class="btn btn-warning btn-icon" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a href="{% url 'skill_delete' skill.id %}" class="btn btn-danger btn-icon" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4">
+                                <div class="empty-state py-5">
+                                    <i class="bi bi-lightning d-block"></i>
+                                    <p>No skills found yet.</p>
+                                    <a href="{% url 'add_skill' %}" class="btn btn-primary mt-2">
+                                        <i class="bi bi-plus-circle me-2"></i>Add First Skill
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

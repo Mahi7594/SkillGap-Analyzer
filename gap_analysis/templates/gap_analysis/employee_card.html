@@ -2,36 +2,226 @@
 <html>
 <head>
     <title>Skill Card: {{ employee.name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #e9ecef; display: flex; justify-content: center; padding: 40px; }
-        .card { background: white; width: 100%; max-width: 600px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         
-        .card-header { background: #003366; color: white; padding: 30px 20px; text-align: center; }
-        .company-name { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8; margin-bottom: 10px; }
-        .emp-name { margin: 0; font-size: 28px; }
-        .emp-role { margin: 5px 0 0 0; font-size: 16px; color: #a8cbf1; }
+        * { box-sizing: border-box; }
         
-        .card-body { padding: 30px; }
-        .skill-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid #eee; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #f0f4ff 0%, #f8fafc 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        
+        .card { 
+            background: white; 
+            width: 100%; 
+            max-width: 700px; 
+            margin: 0 auto;
+            border-radius: 20px; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1); 
+            overflow: hidden;
+        }
+        
+        .card-header { 
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white; 
+            padding: 2.5rem 2rem; 
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .card-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 300px;
+            height: 300px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+        
+        .company-name { 
+            font-size: 12px; 
+            text-transform: uppercase; 
+            letter-spacing: 2px; 
+            opacity: 0.9; 
+            margin-bottom: 8px;
+        }
+        
+        .emp-name { 
+            margin: 0; 
+            font-size: 2rem; 
+            font-weight: 700;
+        }
+        
+        .emp-role { 
+            margin: 8px 0 0 0; 
+            font-size: 1rem; 
+            opacity: 0.9;
+        }
+        
+        .card-body { 
+            padding: 2rem; 
+        }
+        
+        .stats-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-item {
+            flex: 1;
+            text-align: center;
+            padding: 1rem;
+            background: #f8fafc;
+            border-radius: 12px;
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #4f46e5;
+        }
+        
+        .stat-label {
+            font-size: 0.75rem;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+        
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .section-title i { color: #4f46e5; }
+        
+        .skill-row { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 1rem 0; 
+            border-bottom: 1px solid #f1f5f9; 
+        }
+        
         .skill-row:last-child { border-bottom: none; }
         
-        .skill-info { flex-grow: 1; }
-        .skill-name { font-weight: bold; font-size: 16px; color: #333; margin: 0 0 5px 0;}
-        .skill-numbers { font-size: 13px; color: #666; margin: 0;}
+        .skill-info { flex: 1; }
         
-        .skill-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; text-align: center; min-width: 120px; }
-        .badge-proficient { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .badge-gap { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .skill-name { 
+            font-weight: 600; 
+            font-size: 1rem; 
+            color: #1e293b; 
+            margin: 0 0 4px 0;
+        }
         
-        .actions { text-align: center; padding: 20px; background: #f8f9fa; border-top: 1px solid #eee; }
-        .btn { background: #6c757d; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 14px;}
-        .btn:hover { background: #5a6268; }
+        .skill-numbers { 
+            font-size: 0.875rem; 
+            color: #64748b; 
+            margin: 0;
+        }
         
-        /* Hide buttons when printing */
+        .skill-levels {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+        
+        .level-bar-container {
+            flex: 1;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .level-bar-actual {
+            height: 100%;
+            background: linear-gradient(90deg, #4f46e5, #818cf8);
+            border-radius: 4px;
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        
+        .level-bar-required {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444, #f87171);
+            border-radius: 4px;
+            position: absolute;
+            top: 0;
+        }
+        
+        .skill-badge { 
+            padding: 0.5rem 1rem; 
+            border-radius: 20px; 
+            font-size: 0.75rem; 
+            font-weight: 600; 
+            text-align: center;
+            min-width: 100px;
+            white-space: nowrap;
+        }
+        
+        .badge-proficient { 
+            background-color: rgba(16, 185, 129, 0.1); 
+            color: #10b981; 
+        }
+        
+        .badge-gap { 
+            background-color: rgba(239, 68, 68, 0.1); 
+            color: #ef4444; 
+        }
+        
+        .badge-warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+        
+        .gap-critical { border-left: 4px solid #ef4444; }
+        .gap-warning { border-left: 4px solid #f59e0b; }
+        .gap-met { border-left: 4px solid #10b981; }
+        
+        .print-btn {
+            text-align: center;
+            padding: 1.5rem;
+            background: #f8fafc;
+        }
+        
+        .btn-print {
+            background: #4f46e5;
+            color: white;
+            padding: 0.75rem 2rem;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn-print:hover {
+            background: #4338ca;
+        }
+        
         @media print {
             body { background: white; padding: 0; }
-            .card { box-shadow: none; border: 1px solid #ccc; }
-            .actions { display: none; }
+            .card { box-shadow: none; border: 1px solid #e2e8f0; }
+            .print-btn { display: none; }
         }
     </style>
 </head>
@@ -39,35 +229,82 @@
 
     <div class="card">
         <div class="card-header">
-            <div class="company-name">Armstrong Dematic Controls</div>
+            <div class="company-name">Skill Gap Analysis</div>
             <h1 class="emp-name">{{ employee.name }}</h1>
-            <p class="emp-role">{{ employee.designation.title }}</p>
+            <p class="emp-role">
+                <i class="bi bi-briefcase me-2"></i>
+                {{ employee.designation.title|default:"No designation assigned" }}
+            </p>
+            
+            <div class="stats-row mt-3">
+                <div class="stat-item">
+                    <div class="stat-value">{{ skill_details|length }}</div>
+                    <div class="stat-label">Required Skills</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">
+                        {% with skill_details|length as total %}
+                            {% with skill_details|dictsort:"status"|last as last_skill %}
+                                {% if last_skill.status == 'proficient' %}100%
+                                {% else %}{% widthratio last_skill.gap|add:1 1 100 %}%
+                                {% endif %}
+                            {% endwith %}
+                        {% endwith %}
+                    </div>
+                    <div class="stat-label">Skills Met</div>
+                </div>
+            </div>
         </div>
         
         <div class="card-body">
-            <h3 style="margin-top: 0; color: #555; border-bottom: 2px solid #eee; padding-bottom: 10px;">Technical Skill Profile</h3>
+            <h3 class="section-title">
+                <i class="bi bi-clipboard-data"></i>Technical Skill Profile
+            </h3>
             
             {% for skill in skill_details %}
-                <div class="skill-row">
+                <div class="skill-row gap-{{ skill.status }}">
                     <div class="skill-info">
                         <p class="skill-name">{{ skill.name }}</p>
-                        <p class="skill-numbers">Actual: <strong>{{ skill.actual }}/5</strong> | Required: {{ skill.required }}/5</p>
+                        <p class="skill-numbers">
+                            <i class="bi bi-target"></i> Required: <strong>{{ skill.required }}/5</strong>
+                            &nbsp;&nbsp;
+                            <i class="bi bi-person-check"></i> Actual: <strong>{{ skill.actual }}/5</strong>
+                        </p>
+                        
+                        <div class="skill-levels">
+                            <div class="level-bar-container">
+                                <div class="level-bar-actual" style="width: {{ skill.actual|add:20 }}%"></div>
+                            </div>
+                            <small class="text-muted">{{ skill.actual }}/5</small>
+                        </div>
                     </div>
                     
                     {% if skill.status == 'proficient' %}
-                        <div class="skill-badge badge-proficient">{{ skill.gap_text }}</div>
+                        <div class="skill-badge badge-proficient">
+                            <i class="bi bi-check-circle me-1"></i>Met
+                        </div>
+                    {% elif skill.gap <= 1 %}
+                        <div class="skill-badge badge-warning">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Gap: -{{ skill.gap }}
+                        </div>
                     {% else %}
-                        <div class="skill-badge badge-gap">{{ skill.gap_text }}</div>
+                        <div class="skill-badge badge-gap">
+                            <i class="bi bi-x-circle me-1"></i>Gap: -{{ skill.gap }}
+                        </div>
                     {% endif %}
                 </div>
             {% empty %}
-                <p style="text-align: center; color: #888; font-style: italic;">No skills recorded for this employee yet.</p>
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-inbox d-block mb-2" style="font-size: 2rem;"></i>
+                    No skills recorded for this employee yet.
+                </div>
             {% endfor %}
-            
         </div>
         
-        <div class="actions">
-            <button class="btn" onclick="window.print()">🖨️ Print / Save to PDF</button>
+        <div class="print-btn">
+            <button class="btn-print" onclick="window.print()">
+                <i class="bi bi-printer"></i> Print / Save to PDF
+            </button>
         </div>
     </div>
 

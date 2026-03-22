@@ -1,22 +1,129 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>{{ title }}</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
-        .form-container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; }
-        input, select { width: 100%; padding: 10px; margin: 10px 0 20px 0; border: 1px solid #ccc; border-radius: 4px; }
-        button { background: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
-        a { color: #0056b3; text-decoration: none; display: inline-block; margin-top: 20px;}
-    </style>
-</head>
-<body>
-    <div class="form-container">
-        <h2>{{ title }}</h2>
-        <form method="POST">
-            {% csrf_token %} {{ form.as_p }}  <button type="submit">Save Record</button>
-        </form>
-        <a href="{% url 'dashboard' %}">← Back to Dashboard</a>
+{% extends 'gap_analysis/base.html' %}
+
+{% block title %}{{ title }} - Skill Gap Analyzer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-card {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .form-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .form-header h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .form-header p {
+        color: #64748b;
+        margin-top: 0.5rem;
+    }
+
+    .form-card .card-body {
+        padding: 2rem;
+    }
+
+    .form-label {
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 0.5rem;
+    }
+
+    .form-control, .form-select {
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #4f46e5;
+        box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+    }
+
+    .btn-group-form {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+
+    .btn-group-form .btn {
+        flex: 1;
+    }
+
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+    <div class="form-card">
+        <div class="form-header">
+            <h1>
+                <i class="bi {% if 'Employee' in title %}bi-person-plus{% elif 'Designation' in title %}bi-briefcase-plus{% elif 'Skill' in title %}bi-lightning{% elif 'Benchmark' in title %}bi-bookmark-plus{% else %}bi-plus-circle{% endif %} me-2 text-primary"></i>
+                {{ title }}
+            </h1>
+            <p>Fill in the details below to continue</p>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    {% csrf_token %}
+                    
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label for="{{ field.id_for_label }}" class="form-label">
+                            {{ field.label }}
+                        </label>
+                        {{ field }}
+                        {% if field.name == 'skill_name' and existing_skills %}
+                            <datalist id="skill-suggestions">
+                                {% for skill in existing_skills %}
+                                    <option value="{{ skill.name }}">{{ skill.category|default:'' }}</option>
+                                {% endfor %}
+                            </datalist>
+                        {% endif %}
+                        {% if field.help_text %}
+                            <small class="text-muted">{{ field.help_text }}</small>
+                        {% endif %}
+                        {% if field.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in field.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    
+                    <div class="btn-group-form">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle me-2"></i>Save Record
+                        </button>
+                        {% if designation %}
+                            <a href="{% url 'designation_benchmark' designation.id %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-2"></i>Cancel
+                            </a>
+                        {% else %}
+                            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-2"></i>Cancel
+                            </a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
-</body>
-</html>
+</div>
+{% endblock %}
