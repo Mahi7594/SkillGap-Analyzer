@@ -78,11 +78,9 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% with designation.benchmark_set.count as benchmark_count %}
-                                    <span class="badge" style="background: rgba(79, 70, 229, 0.1); color: #4f46e5;">
-                                        {{ benchmark_count }} benchmark{{ benchmark_count|pluralize }}
-                                    </span>
-                                {% endwith %}
+                                <span class="badge" style="background: rgba(79, 70, 229, 0.1); color: #4f46e5;">
+                                    {{ designation.benchmarks.count }}
+                                </span>
                             </td>
                             <td>
                                 <div class="d-flex justify-content-end gap-2">

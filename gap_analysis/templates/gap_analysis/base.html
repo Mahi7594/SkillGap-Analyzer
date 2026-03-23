@@ -329,6 +329,11 @@
                             <i class="bi bi-briefcase me-1"></i> Role Matrix
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'employee_skill_search' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'employee_skill_search' %}">
+                            <i class="bi bi-search me-1"></i> Skill Search
+                        </a>
+                    </li>
                 </ul>
             </div>
         </div>

@@ -85,8 +85,8 @@
                     <thead>
                         <tr>
                             <th>Skill Name</th>
+                            <th>Category</th>
                             <th>Required Level</th>
-                            <th>Mandatory</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -95,19 +95,16 @@
                         <tr>
                             <td>
                                 <strong>{{ benchmark.skill.name }}</strong>
+                            </td>
+                            <td>
                                 {% if benchmark.skill.category %}
-                                    <span class="badge bg-light text-muted ms-2">{{ benchmark.skill.category }}</span>
+                                    <span class="badge bg-light text-muted">{{ benchmark.skill.category }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
                             <td>
                                 <span class="level-badge level-{{ benchmark.required_level }}">{{ benchmark.required_level }}/5</span>
-                            </td>
-                            <td>
-                                {% if benchmark.is_mandatory %}
-                                    <span class="badge bg-danger">Mandatory</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">Optional</span>
-                                {% endif %}
                             </td>
                             <td>
                                 <div class="d-flex justify-content-end gap-2">

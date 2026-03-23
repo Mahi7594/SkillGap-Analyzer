@@ -251,7 +251,7 @@
                 <h2>{{ employee.name }}</h2>
                 <p class="designation">
                     <i class="bi bi-briefcase me-2"></i>
-                    {{ employee.designation.title|default:"No designation assigned" }}
+                    {{ employee.role_matrix.title|default:"No designation assigned" }}
                 </p>
                 <p class="mb-0">
                     {% if employee.email %}

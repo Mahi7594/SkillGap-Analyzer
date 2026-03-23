@@ -38,4 +38,7 @@ urlpatterns = [
     path('designations/<int:pk>/benchmarks/', views.RoleMatrixBenchmarkView.as_view(), name='designation_benchmark'),
     path('designations/<int:pk>/benchmarks/add/', views.RoleMatrixBenchmarkAddView.as_view(), name='designation_benchmark_add'),
     path('designations/benchmark/<int:pk>/delete/', views.RoleMatrixBenchmarkDeleteView.as_view(), name='designation_benchmark_delete'),
+    
+    # Employee Skill Search
+    path('search-skills/', views.EmployeeSkillSearchView.as_view(), name='employee_skill_search'),
 ]

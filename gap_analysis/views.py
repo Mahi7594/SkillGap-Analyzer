@@ -323,7 +323,7 @@ class SkillMatrixCardView(DetailView):
         context = super().get_context_data(**kwargs)
         employee = self.object
         
-        benchmarks = SkillBenchmark.objects.filter(role_matrix=skill_matrix.role_matrix).select_related('skill')
+        benchmarks = SkillBenchmark.objects.filter(role_matrix=employee.role_matrix).select_related('skill')
         
         skill_details = []
         for bm in benchmarks:
@@ -347,6 +347,14 @@ class SkillMatrixCardView(DetailView):
             })
             
         context['skill_details'] = skill_details
+        
+        if skill_details:
+            proficient_count = sum(1 for s in skill_details if s['gap'] <= 0)
+            skills_met_pct = round((proficient_count / len(skill_details)) * 100)
+        else:
+            skills_met_pct = 0
+        context['skills_met_pct'] = skills_met_pct
+        
         return context
 
 # --- CREATE VIEWS ---
@@ -446,6 +454,9 @@ class RoleMatrixListView(ListView):
     template_name = 'gap_analysis/designation_list.html'
     context_object_name = 'designations'
     ordering = ['title']
+
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related('benchmarks')
 
 class RoleMatrixUpdateView(SuccessMessageMixin, UpdateView):
     model = RoleMatrix
@@ -644,3 +655,41 @@ class RoleMatrixBenchmarkDeleteView(SuccessMessageMixin, DeleteView):
     
     def get_success_url(self):
         return reverse('designation_benchmark', kwargs={'pk': self.object.role_matrix.pk})
+
+
+# --- Employee Skill Search ---
+class EmployeeSkillSearchView(TemplateView):
+    template_name = 'gap_analysis/employee_skill_search.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        query = self.request.GET.get('q', '').strip()
+        
+        if query:
+            from django.db.models import Q
+            employees = SkillMatrix.objects.filter(
+                Q(skills__skill__name__icontains=query)
+            ).select_related('role_matrix').prefetch_related('skills', 'skills__skill').distinct()
+            
+            skill_results = []
+            for emp in employees:
+                for es in emp.skills.all():
+                    skill_name_lower = es.skill.name.lower()
+                    query_lower = query.lower()
+                    if skill_name_lower.find(query_lower) != -1:
+                        skill_results.append({
+                            'employee': emp,
+                            'skill': es.skill.name,
+                            'level': es.actual_level,
+                            'required': None,
+                            'gap': None,
+                        })
+            
+            skill_results.sort(key=lambda x: x['level'], reverse=True)
+            context['query'] = query
+            context['results'] = skill_results
+        else:
+            context['query'] = ''
+            context['results'] = []
+        
+        return context

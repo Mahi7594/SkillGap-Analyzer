@@ -242,15 +242,7 @@
                     <div class="stat-label">Required Skills</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-value">
-                        {% with skill_details|length as total %}
-                            {% with skill_details|dictsort:"status"|last as last_skill %}
-                                {% if last_skill.status == 'proficient' %}100%
-                                {% else %}{% widthratio last_skill.gap|add:1 1 100 %}%
-                                {% endif %}
-                            {% endwith %}
-                        {% endwith %}
-                    </div>
+                    <div class="stat-value">{{ skills_met_pct }}%</div>
                     <div class="stat-label">Skills Met</div>
                 </div>
             </div>
