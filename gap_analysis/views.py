@@ -17,16 +17,16 @@ class DashboardView(TemplateView):
         request = self.request
         
         employees = SkillMatrix.objects.all()
-        designations = RoleMatrix.objects.all()
+        designations = RoleMatrix.objects.prefetch_related('benchmarks').all()
         
         selected_emp_id = request.GET.get('employee')
         selected_desig_id = request.GET.get('designation')
         
         selected_employee = None
         if selected_emp_id:
-            selected_employee = SkillMatrix.objects.filter(id=selected_emp_id).first()
+            selected_employee = SkillMatrix.objects.filter(id=selected_emp_id).select_related('role_matrix').prefetch_related('skills', 'skills__skill').first()
         elif employees.exists():
-            selected_employee = employees.first()
+            selected_employee = employees.select_related('role_matrix').prefetch_related('skills', 'skills__skill').first()
 
         selected_designation = None
         if selected_desig_id:
@@ -330,6 +330,7 @@ class SkillMatrixCardView(DetailView):
             emp_skill = EmployeeSkill.objects.filter(skill_matrix=employee, skill=bm.skill).first()
             actual_level = emp_skill.actual_level if emp_skill else 0
             gap = bm.required_level - actual_level
+            level_percentage = (actual_level / 5) * 100
             
             if gap <= 0:
                 status = 'proficient'
@@ -341,6 +342,7 @@ class SkillMatrixCardView(DetailView):
             skill_details.append({
                 'name': bm.skill.name,
                 'actual': actual_level,
+                'level_percentage': level_percentage,
                 'required': bm.required_level,
                 'gap': gap,
                 'status': status,
@@ -404,6 +406,7 @@ class SkillListView(ListView):
     template_name = 'gap_analysis/skill_list.html'
     context_object_name = 'skills'
     ordering = ['name']
+    paginate_by = 15
 
 class SkillUpdateView(SuccessMessageMixin, UpdateView):
     model = Skill
@@ -423,12 +426,103 @@ class SkillDeleteView(SuccessMessageMixin, DeleteView):
     success_url = reverse_lazy('skill_list')
     success_message = "Skill deleted successfully!"
 
+from django.core.paginator import Paginator
+
 # --- EMPLOYEE CRUD VIEWS ---
 class SkillMatrixListView(ListView):
     model = SkillMatrix
     template_name = 'gap_analysis/employee_list.html'
     context_object_name = 'employees'
-    queryset = SkillMatrix.objects.select_related('role_matrix').all().order_by('name')
+    paginate_by = 10
+    
+    def get_queryset(self):
+        queryset = SkillMatrix.objects.select_related('role_matrix').prefetch_related('skills').order_by('name')
+        
+        # Apply filters
+        designation_filter = self.request.GET.get('designation')
+        status_filter = self.request.GET.get('status')
+        
+        if designation_filter:
+            queryset = queryset.filter(role_matrix_id=designation_filter)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        return queryset
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['designations'] = RoleMatrix.objects.all()
+        context['selected_designation'] = self.request.GET.get('designation')
+        context['selected_status'] = self.request.GET.get('status')
+        return context
+
+
+def employee_export_csv(request):
+    import csv
+    from django.http import HttpResponse
+    
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="employees.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Name', 'Email', 'Designation', 'Status', 'Total Skills', 'Avg Gap', 'Skills Met %'])
+    
+    employees = SkillMatrix.objects.select_related('role_matrix').prefetch_related('skills')
+    
+    designation_filter = request.GET.get('designation')
+    status_filter = request.GET.get('status')
+    
+    if designation_filter:
+        employees = employees.filter(role_matrix_id=designation_filter)
+    if status_filter:
+        employees = employees.filter(status=status_filter)
+    
+    for emp in employees:
+        gap_data = emp.get_skill_gap_data()
+        avg_gap = emp.get_overall_gap_score()
+        skills_met = emp.get_skills_met_percentage()
+        
+        writer.writerow([
+            emp.name,
+            emp.email or '',
+            emp.role_matrix.title if emp.role_matrix else '',
+            emp.status,
+            len(gap_data),
+            round(avg_gap, 1),
+            f"{skills_met}%"
+        ])
+    
+    return response
+
+
+class BulkSkillUpdateView(TemplateView):
+    template_name = 'gap_analysis/bulk_skill_update.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['employees'] = SkillMatrix.objects.select_related('role_matrix').prefetch_related('skills', 'skills__skill').order_by('name')
+        context['skills'] = Skill.objects.all().order_by('name')
+        return context
+    
+    def post(self, request):
+        employee_ids = request.POST.getlist('employee_ids')
+        skill_id = request.POST.get('skill_id')
+        actual_level = int(request.POST.get('actual_level', 0))
+        
+        if employee_ids and skill_id:
+            skill = get_object_or_404(Skill, id=skill_id)
+            employees = SkillMatrix.objects.filter(id__in=employee_ids)
+            
+            for emp in employees:
+                EmployeeSkill.objects.update_or_create(
+                    skill_matrix=emp,
+                    skill=skill,
+                    defaults={'actual_level': actual_level}
+                )
+            
+            messages.success(request, f"Updated {len(employee_ids)} employee's skill level for {skill.name}")
+        
+        return redirect('bulk_skill_update')
 
 class SkillMatrixUpdateView(SuccessMessageMixin, UpdateView):
     model = SkillMatrix
@@ -454,6 +548,7 @@ class RoleMatrixListView(ListView):
     template_name = 'gap_analysis/designation_list.html'
     context_object_name = 'designations'
     ordering = ['title']
+    paginate_by = 10
 
     def get_queryset(self):
         return super().get_queryset().prefetch_related('benchmarks')
@@ -521,6 +616,7 @@ class SkillMatrixProfileView(DetailView):
             emp_skill = EmployeeSkill.objects.filter(skill_matrix=employee, skill=benchmark.skill).first()
             actual_level = emp_skill.actual_level if emp_skill else 0
             gap = benchmark.required_level - actual_level
+            level_percentage = (actual_level / 5) * 100  # Convert 0-5 to percentage
             
             skill_data.append({
                 'benchmark_id': benchmark.id,
@@ -529,6 +625,7 @@ class SkillMatrixProfileView(DetailView):
                 'skill_category': benchmark.skill.category,
                 'required_level': benchmark.required_level,
                 'actual_level': actual_level,
+                'level_percentage': level_percentage,
                 'gap': gap,
                 'status': 'met' if gap <= 0 else ('warning' if gap <= 1 else 'critical'),
                 'is_mandatory': benchmark.is_mandatory,

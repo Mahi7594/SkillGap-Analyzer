@@ -338,7 +338,7 @@
                                                    onchange="updateSkill({{ employee.id }}, {{ skill.skill_id }}, this.value)"
                                                    style="width: 60px;">
                                             <div class="progress flex-grow-1" style="height: 8px;">
-                                                <div class="progress-bar bg-primary" id="bar-{{ skill.skill_id }}" style="width: {{ skill.actual_level|add:'-20' }}%"></div>
+                                                <div class="progress-bar bg-primary" id="bar-{{ skill.skill_id }}" style="width: {{ skill.level_percentage }}%"></div>
                                             </div>
                                         </div>
                                     </td>

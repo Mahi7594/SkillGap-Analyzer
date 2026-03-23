@@ -97,9 +97,23 @@ class SkillMatrix(models.Model):
             return self.role_matrix.benchmarks.select_related('skill').all()
         return []
     
+    def has_benchmarks(self):
+        return self.role_matrix and self.role_matrix.benchmarks.exists()
+    
+    def get_missing_benchmarks(self):
+        if not self.role_matrix:
+            return []
+        required_skills = set(b.skill.id for b in self.role_matrix.benchmarks.all())
+        recorded_skills = set(s.skill.id for s in self.skills.all())
+        missing = required_skills - recorded_skills
+        return Skill.objects.filter(id__in=missing)
+    
     def get_skill_gap_data(self):
         gaps = []
         benchmarks = self.get_required_benchmarks()
+        
+        if not benchmarks:
+            return []
         
         for benchmark in benchmarks:
             emp_skill = self.skills.filter(skill=benchmark.skill).first()

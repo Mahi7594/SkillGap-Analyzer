@@ -14,6 +14,7 @@ urlpatterns = [
     
     # Employee URLs
     path('employees/', views.SkillMatrixListView.as_view(), name='employee_list'),
+    path('employees/export/', views.employee_export_csv, name='employee_export'),
     path('employee/<int:pk>/', views.SkillMatrixProfileView.as_view(), name='employee_profile'),
     path('employee/<int:pk>/edit/', views.SkillMatrixUpdateView.as_view(), name='employee_update'),
     path('employee/<int:pk>/delete/', views.SkillMatrixDeleteView.as_view(), name='employee_delete'),
@@ -41,4 +42,7 @@ urlpatterns = [
     
     # Employee Skill Search
     path('search-skills/', views.EmployeeSkillSearchView.as_view(), name='employee_skill_search'),
+    
+    # Bulk Operations
+    path('bulk-skill-update/', views.BulkSkillUpdateView.as_view(), name='bulk_skill_update'),
 ]
