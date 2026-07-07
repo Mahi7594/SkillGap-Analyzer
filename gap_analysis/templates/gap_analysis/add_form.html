@@ -70,7 +70,7 @@
     <div class="form-card">
         <div class="form-header">
             <h1>
-                <i class="bi {% if 'Employee' in title %}bi-person-plus{% elif 'Designation' in title %}bi-briefcase-plus{% elif 'Skill' in title %}bi-lightning{% elif 'Benchmark' in title %}bi-bookmark-plus{% else %}bi-plus-circle{% endif %} me-2 text-primary"></i>
+                <i class="bi {% if 'Plan' in title %}bi-clipboard2-check{% elif 'Employee' in title %}bi-person-plus{% elif 'Designation' in title %}bi-briefcase-plus{% elif 'Skill' in title %}bi-lightning{% elif 'Benchmark' in title %}bi-bookmark-plus{% else %}bi-plus-circle{% endif %} me-2 text-primary"></i>
                 {{ title }}
             </h1>
             <p>Fill in the details below to continue</p>
@@ -113,6 +113,10 @@
                         </button>
                         {% if designation %}
                             <a href="{% url 'designation_benchmark' designation.id %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-2"></i>Cancel
+                            </a>
+                        {% elif employee %}
+                            <a href="{% url 'employee_profile' employee.id %}" class="btn btn-outline-secondary">
                                 <i class="bi bi-arrow-left me-2"></i>Cancel
                             </a>
                         {% else %}

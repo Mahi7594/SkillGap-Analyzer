@@ -313,7 +313,8 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+                {% if user.is_authenticated %}
+                <ul class="navbar-nav ms-auto align-items-lg-center">
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">
                             <i class="bi bi-speedometer2 me-1"></i> Dashboard
@@ -335,11 +336,38 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if 'development_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'development_plan_list' %}">
+                            <i class="bi bi-clipboard2-check me-1"></i> Plans
+                        </a>
+                    </li>
+                    {% if user.is_staff %}
+                    <li class="nav-item">
                         <a class="nav-link {% if 'bulk_skill_update' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'bulk_skill_update' %}">
                             <i class="bi bi-collection me-1"></i> Bulk Update
                         </a>
                     </li>
+                    {% endif %}
+                    <li class="nav-item d-flex align-items-center ms-lg-2">
+                        <span class="text-white-50 small me-2">
+                            <i class="bi bi-person-circle me-1"></i>{{ user.get_username }}{% if user.is_staff %} <span class="badge bg-light text-dark ms-1">staff</span>{% endif %}
+                        </span>
+                        <form method="post" action="{% url 'logout' %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="nav-link border-0 bg-transparent" style="cursor:pointer;">
+                                <i class="bi bi-box-arrow-right me-1"></i>Log out
+                            </button>
+                        </form>
+                    </li>
                 </ul>
+                {% else %}
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'login' %}">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Log in
+                        </a>
+                    </li>
+                </ul>
+                {% endif %}
             </div>
         </div>
     </nav>

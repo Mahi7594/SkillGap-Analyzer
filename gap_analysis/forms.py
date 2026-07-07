@@ -1,6 +1,6 @@
 from django import forms
 from django.forms import formset_factory, BaseFormSet
-from .models import RoleMatrix, SkillBenchmark, SkillMatrix, EmployeeSkill, Skill
+from .models import RoleMatrix, SkillBenchmark, SkillMatrix, EmployeeSkill, Skill, DevelopmentPlan
 
 class BootstrapFormMixin:
     def __init__(self, *args, **kwargs):
@@ -78,6 +78,17 @@ class RoleMatrixBenchmarkForm(BootstrapFormMixin, forms.ModelForm):
             cleaned_data['skill'] = skill
         
         return cleaned_data
+
+class DevelopmentPlanForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = DevelopmentPlan
+        fields = ['skill', 'action', 'resource_url', 'target_date', 'status', 'notes']
+        widgets = {
+            'action': forms.TextInput(attrs={'placeholder': "e.g. 'Complete Django REST course'"}),
+            'resource_url': forms.URLInput(attrs={'placeholder': 'https://... (optional)'}),
+            'target_date': forms.DateInput(attrs={'type': 'date'}),
+            'notes': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Optional notes'}),
+        }
 
 class SkillMatrixForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:

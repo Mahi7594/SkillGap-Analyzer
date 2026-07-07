@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import RoleMatrix, SkillBenchmark, SkillMatrix, EmployeeSkill, Skill, EmployeeSkillHistory
+from .models import RoleMatrix, SkillBenchmark, SkillMatrix, EmployeeSkill, Skill, EmployeeSkillHistory, DevelopmentPlan
 
 @admin.register(RoleMatrix)
 class RoleMatrixAdmin(admin.ModelAdmin):
@@ -33,3 +33,10 @@ class EmployeeSkillHistoryAdmin(admin.ModelAdmin):
     list_display = ('skill_matrix', 'skill', 'recorded_level', 'evaluated_on')
     list_filter = ('skill', 'evaluated_on')
     readonly_fields = ('evaluated_on',)
+
+@admin.register(DevelopmentPlan)
+class DevelopmentPlanAdmin(admin.ModelAdmin):
+    list_display = ('skill_matrix', 'skill', 'action', 'status', 'target_date', 'created_by')
+    list_filter = ('status', 'skill')
+    search_fields = ('action', 'skill_matrix__name', 'skill__name')
+    readonly_fields = ('created_at', 'updated_at')

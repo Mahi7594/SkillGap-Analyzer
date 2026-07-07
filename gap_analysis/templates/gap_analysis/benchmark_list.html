@@ -110,9 +110,11 @@
                                     <a href="{% url 'designation_benchmark' benchmark.role_matrix.id %}" class="btn btn-info btn-icon" title="View Role">
                                         <i class="bi bi-eye"></i>
                                     </a>
+                                    {% if user.is_staff %}
                                     <a href="{% url 'benchmark_delete' benchmark.id %}" class="btn btn-danger btn-icon" title="Delete">
                                         <i class="bi bi-trash"></i>
                                     </a>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

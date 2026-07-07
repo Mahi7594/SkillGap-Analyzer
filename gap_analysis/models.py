@@ -1,6 +1,19 @@
+from collections import defaultdict
+
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.auth.models import User
+from django.utils import timezone
+
+# Mandatory skill gaps count double toward aggregate gap scores, so a missed
+# must-have skill moves the number more than a missed nice-to-have.
+MANDATORY_GAP_WEIGHT = 2
+OPTIONAL_GAP_WEIGHT = 1
+
+
+def gap_weight(is_mandatory):
+    return MANDATORY_GAP_WEIGHT if is_mandatory else OPTIONAL_GAP_WEIGHT
+
 
 class RoleMatrix(models.Model):
     title = models.CharField(max_length=100, help_text="Role/Job Title")
@@ -119,23 +132,25 @@ class SkillMatrix(models.Model):
             emp_skill = self.skills.filter(skill=benchmark.skill).first()
             actual_level = emp_skill.actual_level if emp_skill else 0
             gap = benchmark.required_level - actual_level
-            
+
             gaps.append({
                 'skill': benchmark.skill,
                 'required_level': benchmark.required_level,
                 'actual_level': actual_level,
                 'gap': gap,
+                'weight': gap_weight(benchmark.is_mandatory),
                 'status': 'met' if gap <= 0 else ('warning' if gap <= 1 else 'critical'),
                 'emp_skill': emp_skill,
             })
-        
+
         return gaps
-    
+
     def get_overall_gap_score(self):
         gaps = self.get_skill_gap_data()
         if not gaps:
             return 0
-        return sum(g['gap'] for g in gaps) / len(gaps)
+        total_weight = sum(g['weight'] for g in gaps)
+        return sum(g['gap'] * g['weight'] for g in gaps) / total_weight
     
     def get_skills_met_percentage(self):
         gaps = self.get_skill_gap_data()
@@ -143,6 +158,41 @@ class SkillMatrix(models.Model):
             return 0
         met = sum(1 for g in gaps if g['gap'] <= 0)
         return round((met / len(gaps)) * 100)
+
+    def get_skill_history(self):
+        """Per-skill chronological level history.
+
+        EmployeeSkillHistory only gets a row when a level *changes* (see
+        EmployeeSkill.save() below), so a skill rated once and never touched again
+        has zero history rows. The current EmployeeSkill row is folded in as the
+        latest point so every skill still has at least one data point.
+        """
+        points_by_skill = defaultdict(list)
+
+        for h in self.skill_history.select_related('skill').order_by('evaluated_on'):
+            points_by_skill[h.skill.name].append({
+                'date': h.evaluated_on.date().isoformat(),
+                'level': h.recorded_level,
+            })
+
+        for es in self.skills.select_related('skill').all():
+            current_point = {'date': es.last_evaluated.isoformat(), 'level': es.actual_level}
+            points = points_by_skill[es.skill.name]
+            if not points or points[-1]['date'] != current_point['date']:
+                points.append(current_point)
+
+        history = {}
+        for skill_name, points in points_by_skill.items():
+            points.sort(key=lambda p: p['date'])
+            deduped = []
+            for point in points:
+                if deduped and deduped[-1]['date'] == point['date']:
+                    deduped[-1] = point
+                else:
+                    deduped.append(point)
+            history[skill_name] = deduped
+
+        return history
 
 class EmployeeSkill(models.Model):
     skill_matrix = models.ForeignKey(SkillMatrix, on_delete=models.CASCADE, related_name='skills')
@@ -196,3 +246,35 @@ class EmployeeSkillHistory(models.Model):
     
     def __str__(self):
         return f"{self.employee.name} - {self.skill.name}: {self.recorded_level} on {self.evaluated_on}"
+
+
+class DevelopmentPlan(models.Model):
+    STATUS_CHOICES = [
+        ('not_started', 'Not Started'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    skill_matrix = models.ForeignKey(SkillMatrix, on_delete=models.CASCADE, related_name='development_plans')
+    skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name='development_plans')
+    action = models.CharField(max_length=255, help_text="e.g. 'Complete Django REST course', 'Pair with a senior dev'")
+    resource_url = models.URLField(blank=True, null=True, help_text="Optional link to a course or resource")
+    target_date = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_started')
+    notes = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.skill_matrix.name} - {self.skill.name}: {self.action}"
+
+    @property
+    def is_overdue(self):
+        if not self.target_date or self.status in ('completed', 'cancelled'):
+            return False
+        return self.target_date < timezone.now().date()

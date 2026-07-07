@@ -304,6 +304,7 @@
         </div>
     </div>
     <div class="quick-actions">
+        {% if user.is_staff %}
         <a href="{% url 'add_employee' %}" class="quick-action-btn">
             <i class="bi bi-person-plus"></i>
             Add Employee
@@ -316,6 +317,7 @@
             <i class="bi bi-award"></i>
             Record Skill
         </a>
+        {% endif %}
         <a href="{% url 'employee_list' %}" class="quick-action-btn">
             <i class="bi bi-people"></i>
             View Employees
@@ -340,9 +342,11 @@
             <div class="no-data">
                 <i class="bi bi-inbox"></i>
                 <p>No skill data available for the team yet.</p>
+                {% if user.is_staff %}
                 <a href="{% url 'add_employee_skill' %}" class="btn btn-primary">
                     <i class="bi bi-plus-circle me-2"></i>Record First Skill
                 </a>
+                {% endif %}
             </div>
         {% endif %}
     </div>

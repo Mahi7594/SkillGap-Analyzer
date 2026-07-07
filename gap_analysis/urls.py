@@ -33,7 +33,9 @@ urlpatterns = [
     
     # Benchmarks & Employee Skills
     path('benchmarks/', views.BenchmarkListView.as_view(), name='benchmark_list'),
+    path('benchmarks/<int:pk>/delete/', views.BenchmarkDeleteView.as_view(), name='benchmark_delete'),
     path('employee-skills/', views.EmployeeSkillListView.as_view(), name='employee_skill_list'),
+    path('employee-skills/<int:pk>/delete/', views.EmployeeSkillDeleteView.as_view(), name='employee_skill_delete'),
     
     # Designation Benchmark Management
     path('designations/<int:pk>/benchmarks/', views.RoleMatrixBenchmarkView.as_view(), name='designation_benchmark'),
@@ -42,7 +44,13 @@ urlpatterns = [
     
     # Employee Skill Search
     path('search-skills/', views.EmployeeSkillSearchView.as_view(), name='employee_skill_search'),
-    
+
     # Bulk Operations
     path('bulk-skill-update/', views.BulkSkillUpdateView.as_view(), name='bulk_skill_update'),
+
+    # Development Plans
+    path('employee/<int:pk>/plans/add/', views.DevelopmentPlanCreateView.as_view(), name='development_plan_add'),
+    path('plans/', views.DevelopmentPlanListView.as_view(), name='development_plan_list'),
+    path('plans/<int:pk>/edit/', views.DevelopmentPlanUpdateView.as_view(), name='development_plan_update'),
+    path('plans/<int:pk>/delete/', views.DevelopmentPlanDeleteView.as_view(), name='development_plan_delete'),
 ]

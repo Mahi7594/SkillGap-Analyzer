@@ -274,9 +274,11 @@
                 </div>
             </div>
             <div class="col-auto">
+                {% if user.is_staff %}
                 <a href="{% url 'employee_update' employee.id %}" class="btn btn-light">
                     <i class="bi bi-pencil me-2"></i>Edit Profile
                 </a>
+                {% endif %}
                 <a href="{% url 'employee_card' employee.id %}" class="btn btn-light ms-2" target="_blank">
                     <i class="bi bi-file-earmark-person me-2"></i>Skill Card
                 </a>
@@ -291,6 +293,12 @@
         </button>
         <button class="tab-btn" onclick="showTab('chart')">
             <i class="bi bi-bar-chart me-2"></i>Visualization
+        </button>
+        <button class="tab-btn" onclick="showTab('history')">
+            <i class="bi bi-graph-up me-2"></i>History
+        </button>
+        <button class="tab-btn" onclick="showTab('plans')">
+            <i class="bi bi-clipboard2-check me-2"></i>Development Plans
         </button>
     </div>
 
@@ -329,14 +337,18 @@
                                     </td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
-                                            <input type="number" 
-                                                   class="skill-level-input" 
+                                            {% if user.is_staff %}
+                                            <input type="number"
+                                                   class="skill-level-input"
                                                    id="skill-{{ skill.skill_id }}"
-                                                   value="{{ skill.actual_level }}" 
-                                                   min="0" 
+                                                   value="{{ skill.actual_level }}"
+                                                   min="0"
                                                    max="5"
                                                    onchange="updateSkill({{ employee.id }}, {{ skill.skill_id }}, this.value)"
                                                    style="width: 60px;">
+                                            {% else %}
+                                            <span class="fw-bold" style="width: 60px;">{{ skill.actual_level }}</span>
+                                            {% endif %}
                                             <div class="progress flex-grow-1" style="height: 8px;">
                                                 <div class="progress-bar bg-primary" id="bar-{{ skill.skill_id }}" style="width: {{ skill.level_percentage }}%"></div>
                                             </div>
@@ -419,6 +431,123 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- History Tab -->
+    <div id="history-tab" class="tab-content">
+        {% if skill_data %}
+            <div class="row">
+                {% for skill in skill_data %}
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <strong>{{ skill.skill_name }}</strong>
+                                    {% if skill.skill_category %}
+                                        <div><span class="badge bg-light text-dark">{{ skill.skill_category }}</span></div>
+                                    {% endif %}
+                                </div>
+                                <span id="history-current-{{ skill.skill_id }}"></span>
+                            </div>
+                            <div style="height: 120px;">
+                                <canvas id="history-chart-{{ skill.skill_id }}" data-skill-name="{{ skill.skill_name|escapejs }}"></canvas>
+                            </div>
+                            <div class="small mt-2" id="history-caption-{{ skill.skill_id }}"></div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <i class="bi bi-graph-up"></i>
+                <p>No skill history to show yet.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Development Plans Tab -->
+    <div id="plans-tab" class="tab-content">
+        <div class="d-flex justify-content-end mb-3">
+            {% if user.is_staff %}
+            <a href="{% url 'development_plan_add' employee.id %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-2"></i>New Plan
+            </a>
+            {% endif %}
+        </div>
+        {% if development_plans %}
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Skill</th>
+                                    <th>Action</th>
+                                    <th>Target Date</th>
+                                    <th>Status</th>
+                                    {% if user.is_staff %}<th class="text-end">Actions</th>{% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for plan in development_plans %}
+                                <tr>
+                                    <td><strong>{{ plan.skill.name }}</strong></td>
+                                    <td>
+                                        {{ plan.action }}
+                                        {% if plan.resource_url %}
+                                            <a href="{{ plan.resource_url }}" target="_blank" rel="noopener" title="Open resource" class="ms-1">
+                                                <i class="bi bi-box-arrow-up-right"></i>
+                                            </a>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if plan.target_date %}
+                                            <span class="{% if plan.is_overdue %}text-danger fw-bold{% endif %}">
+                                                {{ plan.target_date }}
+                                                {% if plan.is_overdue %}<i class="bi bi-exclamation-triangle ms-1" title="Overdue"></i>{% endif %}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if plan.status == 'completed' %}
+                                            <span class="badge bg-success">Completed</span>
+                                        {% elif plan.status == 'in_progress' %}
+                                            <span class="badge bg-warning">In Progress</span>
+                                        {% elif plan.status == 'cancelled' %}
+                                            <span class="badge bg-secondary">Cancelled</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">Not Started</span>
+                                        {% endif %}
+                                    </td>
+                                    {% if user.is_staff %}
+                                    <td>
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <a href="{% url 'development_plan_update' plan.id %}" class="btn btn-warning btn-icon" title="Edit">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <a href="{% url 'development_plan_delete' plan.id %}" class="btn btn-danger btn-icon" title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <i class="bi bi-clipboard2-check"></i>
+                <p>No development plans yet for this employee.</p>
+            </div>
+        {% endif %}
     </div>
 </div>
 
@@ -503,6 +632,75 @@
                 }
             }
         }
+    });
+
+    // Skill History sparklines
+    const skillHistory = {{ skill_history|safe }};
+    document.querySelectorAll('[id^="history-chart-"]').forEach((canvas) => {
+        const points = skillHistory[canvas.dataset.skillName] || [];
+        const currentBadge = document.getElementById(canvas.id.replace('history-chart-', 'history-current-'));
+        const caption = document.getElementById(canvas.id.replace('history-chart-', 'history-caption-'));
+        if (points.length === 0) {
+            if (caption) {
+                caption.innerHTML = '<span class="text-muted">Not yet assessed</span>';
+            }
+            return;
+        }
+
+        const first = points[0];
+        const last = points[points.length - 1];
+        const delta = last.level - first.level;
+
+        if (currentBadge) {
+            currentBadge.innerHTML = `<span class="badge bg-light text-dark">${last.level}/5</span>`;
+        }
+
+        if (caption) {
+            if (points.length === 1) {
+                caption.innerHTML = `<span class="text-muted">First recorded ${first.date}</span>`;
+            } else {
+                const arrow = delta > 0 ? '▲' : (delta < 0 ? '▼' : '▬');
+                const trendClass = delta > 0 ? 'text-success' : (delta < 0 ? 'text-danger' : 'text-muted');
+                const sign = delta > 0 ? '+' : '';
+                caption.innerHTML = `<span class="${trendClass}">${arrow} ${sign}${delta} since ${first.date}</span>`;
+            }
+        }
+
+        new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: points.map(p => p.date),
+                datasets: [{
+                    data: points.map(p => p.level),
+                    borderColor: 'rgba(79, 70, 229, 1)',
+                    backgroundColor: 'rgba(79, 70, 229, 0.12)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.25,
+                    pointBackgroundColor: 'rgba(79, 70, 229, 1)',
+                    pointRadius: points.map((_, i) => i === points.length - 1 ? 6 : 4),
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { mode: 'nearest', intersect: false },
+                },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 5,
+                        ticks: { stepSize: 1 },
+                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                    },
+                    x: {
+                        grid: { display: false },
+                    },
+                },
+            },
+        });
     });
 </script>
 {% endblock %}

@@ -1,27 +1,35 @@
+from collections import defaultdict
+
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse_lazy, reverse
 from django.views.generic import TemplateView, DetailView, ListView, CreateView, UpdateView, DeleteView
 from django.contrib.messages.views import SuccessMessageMixin
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 import json
 
-from .forms import RoleMatrixForm, SkillBenchmarkForm, SkillMatrixForm, EmployeeSkillForm, SkillForm, RoleMatrixBenchmarkForm
-from .models import RoleMatrix, SkillBenchmark, SkillMatrix, EmployeeSkill, Skill
+from .forms import (
+    RoleMatrixForm, SkillBenchmarkForm, SkillMatrixForm, EmployeeSkillForm, SkillForm,
+    RoleMatrixBenchmarkForm, DevelopmentPlanForm,
+)
+from .mixins import StaffRequiredMixin
+from .models import RoleMatrix, SkillBenchmark, SkillMatrix, EmployeeSkill, Skill, DevelopmentPlan, gap_weight
 
-class DashboardView(TemplateView):
+class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'gap_analysis/dashboard.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         request = self.request
-        
+
         employees = SkillMatrix.objects.all()
         designations = RoleMatrix.objects.prefetch_related('benchmarks').all()
-        
+
         selected_emp_id = request.GET.get('employee')
         selected_desig_id = request.GET.get('designation')
-        
+
         selected_employee = None
         if selected_emp_id:
             selected_employee = SkillMatrix.objects.filter(id=selected_emp_id).select_related('role_matrix').prefetch_related('skills', 'skills__skill').first()
@@ -34,28 +42,99 @@ class DashboardView(TemplateView):
         elif designations.exists():
             selected_designation = designations.first()
 
+        # One query for every benchmark, keyed by (role_id, skill_id) so nothing below
+        # has to hit the database per employee-skill pair.
+        benchmark_map = {
+            (b.role_matrix_id, b.skill_id): b
+            for b in SkillBenchmark.objects.select_related('skill').all()
+        }
+
+        def benchmark_for(role_matrix_id, skill_id):
+            return benchmark_map.get((role_matrix_id, skill_id))
+
+        # One query for every recorded skill level, reused for every section below
+        # instead of each section re-querying EmployeeSkill from scratch.
+        all_es = list(
+            EmployeeSkill.objects.filter(skill__isnull=False)
+            .select_related('skill_matrix__role_matrix', 'skill')
+        )
+
         # 1. INDIVIDUAL DATA
         ind_labels, ind_actual, ind_benchmark = [], [], []
         if selected_employee:
-            emp_skills = EmployeeSkill.objects.filter(skill_matrix=selected_employee, skill__isnull=False).select_related('skill')
-            for es in emp_skills:
+            for es in selected_employee.skills.all():
+                if es.skill_id is None:
+                    continue
+                bm = benchmark_for(selected_employee.role_matrix_id, es.skill_id)
                 ind_labels.append(es.skill.name)
                 ind_actual.append(es.actual_level)
-                bm = SkillBenchmark.objects.filter(role_matrix=selected_employee.role_matrix, skill=es.skill).first()
                 ind_benchmark.append(bm.required_level if bm else 0)
 
-        # 2. COMPLETE TEAM DATA
-        all_skills = EmployeeSkill.objects.filter(skill__isnull=False).select_related('skill_matrix__role_matrix', 'skill')
-        team_stats = {}
-        for es in all_skills:
-            skill = es.skill.name
-            if skill not in team_stats:
-                team_stats[skill] = {'actual_total': 0, 'benchmark_total': 0, 'count': 0}
-            team_stats[skill]['actual_total'] += es.actual_level
-            team_stats[skill]['count'] += 1
-            bm = SkillBenchmark.objects.filter(role_matrix=es.skill_matrix.role_matrix, skill=es.skill).first()
-            if bm:
-                team_stats[skill]['benchmark_total'] += bm.required_level
+        # Single pass over all employee-skill rows, building every per-skill,
+        # per-employee, and per-role aggregate at once.
+        team_stats = defaultdict(lambda: {'actual_total': 0, 'benchmark_total': 0, 'count': 0})
+        desig_stats = defaultdict(lambda: {'actual_total': 0, 'count': 0})
+        role_gap_totals = defaultdict(lambda: {'weighted_gap': 0, 'weight': 0, 'employees': set()})
+        emp_gap_totals = defaultdict(lambda: {'total_gap': 0, 'gap_count': 0})
+        emp_critical = defaultdict(lambda: {'count': 0, 'skills': []})
+        emp_performance = defaultdict(lambda: {'exceed_count': 0, 'total_evaluated': 0})
+        emp_compliance = defaultdict(lambda: {'met_count': 0, 'gap_count': 0})
+        skill_gap_totals = defaultdict(lambda: {'total_gap': 0, 'count': 0, 'category': None})
+
+        total_weighted_gap = 0
+        total_weight = 0
+        skills_comparison_count = 0
+        skills_met_count = 0
+
+        for es in all_es:
+            skill_name = es.skill.name
+            emp = es.skill_matrix
+            role_id = emp.role_matrix_id
+
+            team_stats[skill_name]['actual_total'] += es.actual_level
+            team_stats[skill_name]['count'] += 1
+
+            if selected_designation and role_id == selected_designation.id:
+                desig_stats[skill_name]['actual_total'] += es.actual_level
+                desig_stats[skill_name]['count'] += 1
+
+            bm = benchmark_for(role_id, es.skill_id)
+            if bm is None:
+                continue
+
+            team_stats[skill_name]['benchmark_total'] += bm.required_level
+
+            gap = bm.required_level - es.actual_level
+            weight = gap_weight(bm.is_mandatory)
+
+            total_weighted_gap += gap * weight
+            total_weight += weight
+            skills_comparison_count += 1
+            if gap <= 0:
+                skills_met_count += 1
+
+            role_gap_totals[role_id]['weighted_gap'] += gap * weight
+            role_gap_totals[role_id]['weight'] += weight
+            role_gap_totals[role_id]['employees'].add(emp.id)
+
+            if gap > 0:
+                emp_gap_totals[emp.id]['total_gap'] += gap
+                emp_gap_totals[emp.id]['gap_count'] += 1
+
+                skill_gap_totals[skill_name]['total_gap'] += gap
+                skill_gap_totals[skill_name]['count'] += 1
+                skill_gap_totals[skill_name]['category'] = es.skill.category
+
+            if gap > 2:
+                emp_critical[emp.id]['count'] += 1
+                emp_critical[emp.id]['skills'].append(skill_name)
+
+            emp_performance[emp.id]['total_evaluated'] += 1
+            if es.actual_level >= bm.required_level:
+                emp_performance[emp.id]['exceed_count'] += 1
+                emp_compliance[emp.id]['met_count'] += 1
+            elif gap > 1:
+                emp_compliance[emp.id]['gap_count'] += 1
 
         team_labels = list(team_stats.keys())
         team_actual = [round(team_stats[s]['actual_total'] / team_stats[s]['count'], 1) for s in team_labels]
@@ -64,209 +143,97 @@ class DashboardView(TemplateView):
         # 3. DESIGNATION DATA
         desig_labels, desig_actual, desig_benchmark = [], [], []
         if selected_designation:
-            desig_skills = EmployeeSkill.objects.filter(skill_matrix__role_matrix=selected_designation, skill__isnull=False).select_related('skill')
-            desig_stats = {}
-            for es in desig_skills:
-                skill = es.skill.name
-                if skill not in desig_stats:
-                    desig_stats[skill] = {'actual_total': 0, 'count': 0}
-                desig_stats[skill]['actual_total'] += es.actual_level
-                desig_stats[skill]['count'] += 1
-
             desig_labels = list(desig_stats.keys())
             desig_actual = [round(desig_stats[s]['actual_total'] / desig_stats[s]['count'], 1) for s in desig_labels]
-            for skill in desig_labels:
-                bm = SkillBenchmark.objects.filter(role_matrix=selected_designation, skill__name=skill).first()
-                desig_benchmark.append(bm.required_level if bm else 0)
+            role_benchmarks_by_skill_name = {
+                b.skill.name: b.required_level
+                for (role_id, _), b in benchmark_map.items() if role_id == selected_designation.id
+            }
+            desig_benchmark = [role_benchmarks_by_skill_name.get(label, 0) for label in desig_labels]
 
         # KPI Metrics
         total_employees = employees.count()
         total_skills = Skill.objects.count()
-        
-        # Calculate average gap score and skills met percentage
-        all_emp_skills = EmployeeSkill.objects.filter(skill__isnull=False).select_related('skill_matrix__role_matrix', 'skill')
-        total_gap = 0
-        skills_comparison_count = 0
-        skills_met_count = 0
-        
-        for es in all_emp_skills:
-            bm = SkillBenchmark.objects.filter(role_matrix=es.skill_matrix.role_matrix, skill=es.skill).first()
-            if bm:
-                gap = bm.required_level - es.actual_level
-                total_gap += gap
-                skills_comparison_count += 1
-                if gap <= 0:
-                    skills_met_count += 1
-        
-        avg_gap_score = round(total_gap / skills_comparison_count, 1) if skills_comparison_count > 0 else 0
+
+        avg_gap_score = round(total_weighted_gap / total_weight, 1) if total_weight > 0 else 0
         skills_met_percent = round((skills_met_count / skills_comparison_count) * 100) if skills_comparison_count > 0 else 0
-        
-        # === NEW INSIGHTS ===
-        
-        # 1. Role Gap Summary - average gap per role
+
+        emp_by_id = {emp.id: emp for emp in employees}
+
+        # 1. Role Gap Summary - weighted average gap per role
         role_gap_data = []
         for role in designations:
-            role_skills = EmployeeSkill.objects.filter(
-                skill_matrix__role_matrix=role,
-                skill__isnull=False
-            ).select_related('skill')
-            
-            if role_skills.exists():
-                role_total_gap = 0
-                role_count = 0
-                for es in role_skills:
-                    bm = SkillBenchmark.objects.filter(role_matrix=role, skill=es.skill).first()
-                    if bm:
-                        role_total_gap += (bm.required_level - es.actual_level)
-                        role_count += 1
-                
-                avg_role_gap = round(role_total_gap / role_count, 2) if role_count > 0 else 0
-                role_gap_data.append({
-                    'role': role.title,
-                    'department': role.department or '-',
-                    'avg_gap': avg_role_gap,
-                    'employee_count': role_skills.values('skill_matrix').distinct().count(),
-                })
-        
+            totals = role_gap_totals.get(role.id)
+            if not totals or totals['weight'] == 0:
+                continue
+            role_gap_data.append({
+                'role': role.title,
+                'department': role.department or '-',
+                'avg_gap': round(totals['weighted_gap'] / totals['weight'], 2),
+                'employee_count': len(totals['employees']),
+            })
+
         # 2. Top Skill Gaps - employees with highest total gaps
-        top_gap_employees = []
-        for emp in employees:
-            emp_skills = EmployeeSkill.objects.filter(
-                skill_matrix=emp,
-                skill__isnull=False
-            ).select_related('skill')
-            
-            total_gap = 0
-            gap_count = 0
-            for es in emp_skills:
-                bm = SkillBenchmark.objects.filter(role_matrix=emp.role_matrix, skill=es.skill).first()
-                if bm:
-                    gap = bm.required_level - es.actual_level
-                    if gap > 0:
-                        total_gap += gap
-                        gap_count += 1
-            
-            if gap_count > 0:
-                top_gap_employees.append({
-                    'name': emp.name,
-                    'role': emp.role_matrix.title if emp.role_matrix else '-',
-                    'total_gap': total_gap,
-                    'gap_count': gap_count,
-                })
-        
+        top_gap_employees = [
+            {
+                'name': emp_by_id[emp_id].name,
+                'role': emp_by_id[emp_id].role_matrix.title if emp_by_id[emp_id].role_matrix else '-',
+                'total_gap': totals['total_gap'],
+                'gap_count': totals['gap_count'],
+            }
+            for emp_id, totals in emp_gap_totals.items()
+        ]
         top_gap_employees = sorted(top_gap_employees, key=lambda x: x['total_gap'], reverse=True)[:5]
-        
+
         # 3. Critical Gaps - employees with gap > 2
-        critical_gaps = []
-        for emp in employees:
-            emp_skills = EmployeeSkill.objects.filter(
-                skill_matrix=emp,
-                skill__isnull=False
-            ).select_related('skill')
-            
-            critical_count = 0
-            critical_skills = []
-            for es in emp_skills:
-                bm = SkillBenchmark.objects.filter(role_matrix=emp.role_matrix, skill=es.skill).first()
-                if bm:
-                    gap = bm.required_level - es.actual_level
-                    if gap > 2:
-                        critical_count += 1
-                        critical_skills.append(es.skill.name)
-            
-            if critical_count > 0:
-                critical_gaps.append({
-                    'name': emp.name,
-                    'role': emp.role_matrix.title if emp.role_matrix else '-',
-                    'critical_count': critical_count,
-                    'skills': critical_skills[:3],
-                })
-        
+        critical_gaps = [
+            {
+                'name': emp_by_id[emp_id].name,
+                'role': emp_by_id[emp_id].role_matrix.title if emp_by_id[emp_id].role_matrix else '-',
+                'critical_count': data['count'],
+                'skills': data['skills'][:3],
+            }
+            for emp_id, data in emp_critical.items()
+        ]
         critical_gaps = sorted(critical_gaps, key=lambda x: x['critical_count'], reverse=True)[:5]
-        
+
         # 4. Top Performers - employees exceeding benchmark requirements
-        top_performers = []
-        for emp in employees:
-            emp_skills = EmployeeSkill.objects.filter(
-                skill_matrix=emp,
-                skill__isnull=False
-            ).select_related('skill')
-            
-            exceed_count = 0
-            total_evaluated = 0
-            for es in emp_skills:
-                bm = SkillBenchmark.objects.filter(role_matrix=emp.role_matrix, skill=es.skill).first()
-                if bm:
-                    total_evaluated += 1
-                    if es.actual_level >= bm.required_level:
-                        exceed_count += 1
-            
-            if total_evaluated > 0:
-                top_performers.append({
-                    'name': emp.name,
-                    'role': emp.role_matrix.title if emp.role_matrix else '-',
-                    'exceed_count': exceed_count,
-                    'total_evaluated': total_evaluated,
-                    'exceed_percent': round((exceed_count / total_evaluated) * 100),
-                })
-        
+        top_performers = [
+            {
+                'name': emp_by_id[emp_id].name,
+                'role': emp_by_id[emp_id].role_matrix.title if emp_by_id[emp_id].role_matrix else '-',
+                'exceed_count': data['exceed_count'],
+                'total_evaluated': data['total_evaluated'],
+                'exceed_percent': round((data['exceed_count'] / data['total_evaluated']) * 100),
+            }
+            for emp_id, data in emp_performance.items()
+            if data['total_evaluated'] > 0
+        ]
         top_performers = sorted(top_performers, key=lambda x: x['exceed_percent'], reverse=True)[:5]
-        
+
         # 5. Skills Needing Training - skills with highest gaps across org
-        skill_gaps = {}
-        all_es = EmployeeSkill.objects.filter(skill__isnull=False).select_related('skill', 'skill_matrix__role_matrix')
-        for es in all_es:
-            bm = SkillBenchmark.objects.filter(role_matrix=es.skill_matrix.role_matrix, skill=es.skill).first()
-            if bm:
-                gap = bm.required_level - es.actual_level
-                if gap > 0:
-                    if es.skill.name not in skill_gaps:
-                        skill_gaps[es.skill.name] = {'total_gap': 0, 'count': 0, 'category': es.skill.category}
-                    skill_gaps[es.skill.name]['total_gap'] += gap
-                    skill_gaps[es.skill.name]['count'] += 1
-        
-        skills_needing_training = []
-        for skill_name, data in skill_gaps.items():
-            avg_gap = round(data['total_gap'] / data['count'], 2)
-            skills_needing_training.append({
+        skills_needing_training = [
+            {
                 'skill': skill_name,
                 'category': data['category'] or '-',
-                'avg_gap': avg_gap,
+                'avg_gap': round(data['total_gap'] / data['count'], 2),
                 'affected_count': data['count'],
-            })
-        
+            }
+            for skill_name, data in skill_gap_totals.items()
+        ]
         skills_needing_training = sorted(skills_needing_training, key=lambda x: x['avg_gap'], reverse=True)[:5]
-        
+
         # 6. Benchmark Compliance - % of employees meeting benchmarks
         compliance_stats = {'meeting': 0, 'partial': 0, 'needs_training': 0, 'total': 0}
-        for emp in employees:
-            emp_skills = EmployeeSkill.objects.filter(
-                skill_matrix=emp,
-                skill__isnull=False
-            ).select_related('skill')
-            
-            if not emp_skills.exists():
-                continue
-                
+        for emp_id, data in emp_compliance.items():
             compliance_stats['total'] += 1
-            met_count = 0
-            gap_count = 0
-            for es in emp_skills:
-                bm = SkillBenchmark.objects.filter(role_matrix=emp.role_matrix, skill=es.skill).first()
-                if bm:
-                    if es.actual_level >= bm.required_level:
-                        met_count += 1
-                    elif bm.required_level - es.actual_level > 1:
-                        gap_count += 1
-            
-            if met_count == 0 and gap_count > 0:
+            if data['met_count'] == 0 and data['gap_count'] > 0:
                 compliance_stats['needs_training'] += 1
-            elif met_count > 0 and gap_count == 0:
+            elif data['met_count'] > 0 and data['gap_count'] == 0:
                 compliance_stats['meeting'] += 1
             else:
                 compliance_stats['partial'] += 1
-        
-        # Calculate percentages
+
         if compliance_stats['total'] > 0:
             compliance_stats['meeting_pct'] = round((compliance_stats['meeting'] / compliance_stats['total']) * 100)
             compliance_stats['partial_pct'] = round((compliance_stats['partial'] / compliance_stats['total']) * 100)
@@ -275,7 +242,7 @@ class DashboardView(TemplateView):
             compliance_stats['meeting_pct'] = 0
             compliance_stats['partial_pct'] = 0
             compliance_stats['needs_training_pct'] = 0
-        
+
         # 7. Skill Distribution by Category
         skill_category_dist = {}
         for cat in Skill.CATEGORY_CHOICES:
@@ -313,7 +280,7 @@ class DashboardView(TemplateView):
         })
         return context
 
-class SkillMatrixCardView(DetailView):
+class SkillMatrixCardView(LoginRequiredMixin, DetailView):
     model = SkillMatrix
     template_name = 'gap_analysis/employee_card.html'
     pk_url_kwarg = 'emp_id'
@@ -360,7 +327,7 @@ class SkillMatrixCardView(DetailView):
         return context
 
 # --- CREATE VIEWS ---
-class RoleMatrixCreateView(SuccessMessageMixin, CreateView):
+class RoleMatrixCreateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, CreateView):
     model = RoleMatrix
     form_class = RoleMatrixForm
     template_name = 'gap_analysis/add_form.html'
@@ -368,7 +335,7 @@ class RoleMatrixCreateView(SuccessMessageMixin, CreateView):
     success_message = "RoleMatrix created successfully!"
     extra_context = {'title': 'Add RoleMatrix'}
 
-class SkillBenchmarkCreateView(SuccessMessageMixin, CreateView):
+class SkillBenchmarkCreateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, CreateView):
     model = SkillBenchmark
     form_class = SkillBenchmarkForm
     template_name = 'gap_analysis/add_form.html'
@@ -376,7 +343,7 @@ class SkillBenchmarkCreateView(SuccessMessageMixin, CreateView):
     success_message = "Skill benchmark created successfully!"
     extra_context = {'title': 'Add Skill Benchmark'}
 
-class SkillMatrixCreateView(SuccessMessageMixin, CreateView):
+class SkillMatrixCreateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, CreateView):
     model = SkillMatrix
     form_class = SkillMatrixForm
     template_name = 'gap_analysis/add_form.html'
@@ -384,7 +351,7 @@ class SkillMatrixCreateView(SuccessMessageMixin, CreateView):
     success_message = "Skill Matrix created successfully!"
     extra_context = {'title': 'Add Employee'}
 
-class EmployeeSkillCreateView(SuccessMessageMixin, CreateView):
+class EmployeeSkillCreateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, CreateView):
     model = EmployeeSkill
     form_class = EmployeeSkillForm
     template_name = 'gap_analysis/add_form.html'
@@ -392,7 +359,7 @@ class EmployeeSkillCreateView(SuccessMessageMixin, CreateView):
     success_message = "Employee skill recorded successfully!"
     extra_context = {'title': 'Add Employee Skill'}
 
-class SkillCreateView(SuccessMessageMixin, CreateView):
+class SkillCreateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, CreateView):
     model = Skill
     form_class = SkillForm
     template_name = 'gap_analysis/add_form.html'
@@ -401,14 +368,14 @@ class SkillCreateView(SuccessMessageMixin, CreateView):
     extra_context = {'title': 'Add Skill'}
 
 # --- SKILL CRUD VIEWS ---
-class SkillListView(ListView):
+class SkillListView(LoginRequiredMixin, ListView):
     model = Skill
     template_name = 'gap_analysis/skill_list.html'
     context_object_name = 'skills'
     ordering = ['name']
     paginate_by = 15
 
-class SkillUpdateView(SuccessMessageMixin, UpdateView):
+class SkillUpdateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Skill
     form_class = SkillForm
     template_name = 'gap_analysis/add_form.html'
@@ -420,7 +387,7 @@ class SkillUpdateView(SuccessMessageMixin, UpdateView):
         context['title'] = f'Edit Skill: {self.object.name}'
         return context
 
-class SkillDeleteView(SuccessMessageMixin, DeleteView):
+class SkillDeleteView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, DeleteView):
     model = Skill
     template_name = 'gap_analysis/skill_confirm_delete.html'
     success_url = reverse_lazy('skill_list')
@@ -429,7 +396,7 @@ class SkillDeleteView(SuccessMessageMixin, DeleteView):
 from django.core.paginator import Paginator
 
 # --- EMPLOYEE CRUD VIEWS ---
-class SkillMatrixListView(ListView):
+class SkillMatrixListView(LoginRequiredMixin, ListView):
     model = SkillMatrix
     template_name = 'gap_analysis/employee_list.html'
     context_object_name = 'employees'
@@ -457,6 +424,7 @@ class SkillMatrixListView(ListView):
         return context
 
 
+@login_required
 def employee_export_csv(request):
     import csv
     from django.http import HttpResponse
@@ -495,7 +463,7 @@ def employee_export_csv(request):
     return response
 
 
-class BulkSkillUpdateView(TemplateView):
+class BulkSkillUpdateView(LoginRequiredMixin, StaffRequiredMixin, TemplateView):
     template_name = 'gap_analysis/bulk_skill_update.html'
     
     def get_context_data(self, **kwargs):
@@ -524,7 +492,7 @@ class BulkSkillUpdateView(TemplateView):
         
         return redirect('bulk_skill_update')
 
-class SkillMatrixUpdateView(SuccessMessageMixin, UpdateView):
+class SkillMatrixUpdateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, UpdateView):
     model = SkillMatrix
     form_class = SkillMatrixForm
     template_name = 'gap_analysis/add_form.html'
@@ -536,14 +504,14 @@ class SkillMatrixUpdateView(SuccessMessageMixin, UpdateView):
         context['title'] = f'Edit Employee: {self.object.name}'
         return context
 
-class SkillMatrixDeleteView(SuccessMessageMixin, DeleteView):
+class SkillMatrixDeleteView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, DeleteView):
     model = SkillMatrix
     template_name = 'gap_analysis/employee_confirm_delete.html'
     success_url = reverse_lazy('employee_list')
     success_message = "Employee deleted successfully!"
 
 # --- DESIGNATION CRUD VIEWS ---
-class RoleMatrixListView(ListView):
+class RoleMatrixListView(LoginRequiredMixin, ListView):
     model = RoleMatrix
     template_name = 'gap_analysis/designation_list.html'
     context_object_name = 'designations'
@@ -553,7 +521,7 @@ class RoleMatrixListView(ListView):
     def get_queryset(self):
         return super().get_queryset().prefetch_related('benchmarks')
 
-class RoleMatrixUpdateView(SuccessMessageMixin, UpdateView):
+class RoleMatrixUpdateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, UpdateView):
     model = RoleMatrix
     form_class = RoleMatrixForm
     template_name = 'gap_analysis/add_form.html'
@@ -565,41 +533,41 @@ class RoleMatrixUpdateView(SuccessMessageMixin, UpdateView):
         context['title'] = f'Edit RoleMatrix: {self.object.title}'
         return context
 
-class RoleMatrixDeleteView(SuccessMessageMixin, DeleteView):
+class RoleMatrixDeleteView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, DeleteView):
     model = RoleMatrix
     template_name = 'gap_analysis/designation_confirm_delete.html'
     success_url = reverse_lazy('designation_list')
     success_message = "RoleMatrix deleted successfully!"
 
 # --- BENCHMARK & EMPLOYEE SKILL LIST VIEWS ---
-class BenchmarkListView(ListView):
+class BenchmarkListView(LoginRequiredMixin, ListView):
     model = SkillBenchmark
     template_name = 'gap_analysis/benchmark_list.html'
     context_object_name = 'benchmarks'
     queryset = SkillBenchmark.objects.select_related('role_matrix', 'skill').all()
 
-class BenchmarkDeleteView(SuccessMessageMixin, DeleteView):
+class BenchmarkDeleteView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, DeleteView):
     model = SkillBenchmark
     template_name = 'gap_analysis/benchmark_confirm_delete.html'
     success_message = "Benchmark deleted successfully!"
-    
+
     def get_success_url(self):
         return reverse('designation_benchmark', kwargs={'pk': self.object.role_matrix.pk})
 
-class EmployeeSkillListView(ListView):
+class EmployeeSkillListView(LoginRequiredMixin, ListView):
     model = EmployeeSkill
     template_name = 'gap_analysis/employee_skill_list.html'
     context_object_name = 'employee_skills'
     queryset = EmployeeSkill.objects.select_related('skill_matrix', 'skill').all().order_by('-last_evaluated')
 
-class EmployeeSkillDeleteView(SuccessMessageMixin, DeleteView):
+class EmployeeSkillDeleteView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, DeleteView):
     model = EmployeeSkill
     template_name = 'gap_analysis/employee_skill_confirm_delete.html'
     success_url = reverse_lazy('dashboard')
     success_message = "Employee skill deleted successfully!"
 
 # --- EMPLOYEE PROFILE VIEWS ---
-class SkillMatrixProfileView(DetailView):
+class SkillMatrixProfileView(LoginRequiredMixin, DetailView):
     model = SkillMatrix
     template_name = 'gap_analysis/employee_profile.html'
     pk_url_kwarg = 'pk'
@@ -643,12 +611,19 @@ class SkillMatrixProfileView(DetailView):
         context['chart_labels'] = json.dumps([s['skill_name'] for s in skill_data])
         context['chart_actual'] = json.dumps([s['actual_level'] for s in skill_data])
         context['chart_required'] = json.dumps([s['required_level'] for s in skill_data])
-        
+
+        context['skill_history'] = json.dumps(employee.get_skill_history())
+        context['development_plans'] = employee.development_plans.select_related('skill')
+
         return context
 
 
+@login_required
 def employee_skill_update(request, pk):
     """AJAX view to update employee skill level"""
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'error': 'Forbidden'}, status=403)
+
     if request.method == 'POST':
         skill_matrix = get_object_or_404(SkillMatrix, pk=pk)
         skill_id = request.POST.get('skill_id')
@@ -678,7 +653,7 @@ def employee_skill_update(request, pk):
     return JsonResponse({'success': False, 'error': 'Invalid request'})
 
 
-class SkillMatrixProfileUpdateView(SuccessMessageMixin, UpdateView):
+class SkillMatrixProfileUpdateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, UpdateView):
     model = SkillMatrix
     form_class = SkillMatrixForm
     template_name = 'gap_analysis/employee_profile.html'
@@ -693,7 +668,7 @@ class SkillMatrixProfileUpdateView(SuccessMessageMixin, UpdateView):
 
 
 # --- DESIGNATION BENCHMARK MANAGEMENT ---
-class RoleMatrixBenchmarkView(TemplateView):
+class RoleMatrixBenchmarkView(LoginRequiredMixin, TemplateView):
     template_name = 'gap_analysis/designation_benchmark.html'
     
     def get_context_data(self, **kwargs):
@@ -707,15 +682,15 @@ class RoleMatrixBenchmarkView(TemplateView):
         return context
 
 
-class RoleMatrixBenchmarkAddView(SuccessMessageMixin, CreateView):
+class RoleMatrixBenchmarkAddView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, CreateView):
     model = SkillBenchmark
     form_class = RoleMatrixBenchmarkForm
     template_name = 'gap_analysis/add_form.html'
     success_message = "Skill benchmark added successfully!"
-    
+
     def get_success_url(self):
         return reverse('designation_benchmark', kwargs={'pk': self.kwargs['pk']})
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         designation = get_object_or_404(RoleMatrix, pk=self.kwargs['pk'])
@@ -723,19 +698,7 @@ class RoleMatrixBenchmarkAddView(SuccessMessageMixin, CreateView):
         context['designation'] = designation
         context['existing_skills'] = Skill.objects.all()
         return context
-    
-    def form_valid(self, form):
-        role_matrix = get_object_or_404(RoleMatrix, pk=self.kwargs['pk'])
-        
-        # Get the skill from cleaned_data (created in form.clean())
-        skill = form.cleaned_data.get('skill')
-        
-        form.instance.role_matrix = role_matrix
-        if skill:
-            form.instance.skill = skill
-        
-        return super().form_valid(form)
-    
+
     def form_valid(self, form):
         designation = get_object_or_404(RoleMatrix, pk=self.kwargs['pk'])
         skill = form.cleaned_data.get('skill')
@@ -745,7 +708,7 @@ class RoleMatrixBenchmarkAddView(SuccessMessageMixin, CreateView):
         return super().form_valid(form)
 
 
-class RoleMatrixBenchmarkDeleteView(SuccessMessageMixin, DeleteView):
+class RoleMatrixBenchmarkDeleteView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, DeleteView):
     model = SkillBenchmark
     template_name = 'gap_analysis/benchmark_confirm_delete.html'
     success_message = "Benchmark removed successfully!"
@@ -754,39 +717,119 @@ class RoleMatrixBenchmarkDeleteView(SuccessMessageMixin, DeleteView):
         return reverse('designation_benchmark', kwargs={'pk': self.object.role_matrix.pk})
 
 
+# --- Development Plans ---
+class DevelopmentPlanCreateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, CreateView):
+    model = DevelopmentPlan
+    form_class = DevelopmentPlanForm
+    template_name = 'gap_analysis/add_form.html'
+    success_message = "Development plan created successfully!"
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        employee = get_object_or_404(SkillMatrix, pk=self.kwargs['pk'])
+        skill_ids = set(employee.get_required_benchmarks().values_list('skill_id', flat=True))
+        skill_ids |= set(employee.skills.values_list('skill_id', flat=True))
+        form.fields['skill'].queryset = Skill.objects.filter(id__in=skill_ids) if skill_ids else Skill.objects.all()
+        return form
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'New Development Plan'
+        context['employee'] = get_object_or_404(SkillMatrix, pk=self.kwargs['pk'])
+        return context
+
+    def form_valid(self, form):
+        employee = get_object_or_404(SkillMatrix, pk=self.kwargs['pk'])
+        form.instance.skill_matrix = employee
+        form.instance.created_by = self.request.user
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('employee_profile', kwargs={'pk': self.kwargs['pk']})
+
+
+class DevelopmentPlanUpdateView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, UpdateView):
+    model = DevelopmentPlan
+    form_class = DevelopmentPlanForm
+    template_name = 'gap_analysis/add_form.html'
+    success_message = "Development plan updated successfully!"
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        employee = self.object.skill_matrix
+        skill_ids = set(employee.get_required_benchmarks().values_list('skill_id', flat=True))
+        skill_ids |= set(employee.skills.values_list('skill_id', flat=True))
+        form.fields['skill'].queryset = Skill.objects.filter(id__in=skill_ids) if skill_ids else Skill.objects.all()
+        return form
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = f'Edit Development Plan: {self.object.action}'
+        context['employee'] = self.object.skill_matrix
+        return context
+
+    def get_success_url(self):
+        return reverse('employee_profile', kwargs={'pk': self.object.skill_matrix.pk})
+
+
+class DevelopmentPlanDeleteView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixin, DeleteView):
+    model = DevelopmentPlan
+    template_name = 'gap_analysis/development_plan_confirm_delete.html'
+    success_message = "Development plan deleted successfully!"
+
+    def get_success_url(self):
+        return reverse('employee_profile', kwargs={'pk': self.object.skill_matrix.pk})
+
+
+class DevelopmentPlanListView(LoginRequiredMixin, ListView):
+    model = DevelopmentPlan
+    template_name = 'gap_analysis/development_plan_list.html'
+    context_object_name = 'plans'
+    paginate_by = 15
+
+    def get_queryset(self):
+        queryset = DevelopmentPlan.objects.select_related('skill_matrix', 'skill')
+        status_filter = self.request.GET.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['selected_status'] = self.request.GET.get('status')
+        context['status_choices'] = DevelopmentPlan.STATUS_CHOICES
+        return context
+
+
 # --- Employee Skill Search ---
-class EmployeeSkillSearchView(TemplateView):
+class EmployeeSkillSearchView(LoginRequiredMixin, TemplateView):
     template_name = 'gap_analysis/employee_skill_search.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         query = self.request.GET.get('q', '').strip()
-        
+
         if query:
-            from django.db.models import Q
-            employees = SkillMatrix.objects.filter(
-                Q(skills__skill__name__icontains=query)
-            ).select_related('role_matrix').prefetch_related('skills', 'skills__skill').distinct()
-            
-            skill_results = []
-            for emp in employees:
-                for es in emp.skills.all():
-                    skill_name_lower = es.skill.name.lower()
-                    query_lower = query.lower()
-                    if skill_name_lower.find(query_lower) != -1:
-                        skill_results.append({
-                            'employee': emp,
-                            'skill': es.skill.name,
-                            'level': es.actual_level,
-                            'required': None,
-                            'gap': None,
-                        })
-            
+            matching_skills = EmployeeSkill.objects.filter(
+                skill__name__icontains=query
+            ).select_related('skill_matrix__role_matrix', 'skill')
+
+            skill_results = [
+                {
+                    'employee': es.skill_matrix,
+                    'skill': es.skill.name,
+                    'level': es.actual_level,
+                    'required': None,
+                    'gap': None,
+                }
+                for es in matching_skills
+            ]
+
             skill_results.sort(key=lambda x: x['level'], reverse=True)
             context['query'] = query
             context['results'] = skill_results
         else:
             context['query'] = ''
             context['results'] = []
-        
+
         return context
