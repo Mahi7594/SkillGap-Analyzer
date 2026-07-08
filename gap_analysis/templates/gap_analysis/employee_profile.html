@@ -186,51 +186,7 @@
         height: 300px;
         margin-top: 1rem;
     }
-    
-    .tabs-nav {
-        display: flex;
-        gap: 0.5rem;
-        margin-bottom: 1.5rem;
-        border-bottom: 2px solid #e2e8f0;
-        padding-bottom: 0.5rem;
-    }
-    
-    .tab-btn {
-        padding: 0.75rem 1.5rem;
-        background: none;
-        border: none;
-        font-weight: 500;
-        color: #64748b;
-        cursor: pointer;
-        border-radius: 8px 8px 0 0;
-        transition: all 0.2s ease;
-    }
-    
-    .tab-btn:hover {
-        background: #f8fafc;
-    }
-    
-    .tab-btn.active {
-        color: #4f46e5;
-        background: #f8fafc;
-        border-bottom: 2px solid #4f46e5;
-    }
-    
-    .tab-content {
-        display: none;
-    }
-    
-    .tab-content.active {
-        display: block;
-    }
-    
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
-    
+
     .skill-level-input {
         width: 60px;
     }
@@ -308,36 +264,61 @@
             <div class="card">
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-hover mb-0">
+                        <table class="table table-hover mb-0 mobile-cards">
                             <thead>
                                 <tr>
-                                    <th style="width: 25%;">Skill</th>
-                                    <th style="width: 15%;">Category</th>
-                                    <th style="width: 15%;">Required</th>
-                                    <th style="width: 25%;">Actual Level</th>
-                                    <th style="width: 10%;">Gap</th>
-                                    <th style="width: 10%;">Status</th>
+                                    <th>Skill</th>
+                                    <th>Category</th>
+                                    <th>Required</th>
+                                    <th>Self Rating</th>
+                                    <th>Manager Level</th>
+                                    <th>Gap</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for skill in skill_data %}
                                 <tr>
-                                    <td>
+                                    <td data-label="Skill">
                                         <strong>{{ skill.skill_name }}</strong>
                                     </td>
-                                    <td>
+                                    <td data-label="Category">
                                         {% if skill.skill_category %}
                                             <span class="badge bg-light text-dark">{{ skill.skill_category }}</span>
                                         {% else %}
                                             <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Required">
                                         <span class="fw-bold text-danger">{{ skill.required_level }}</span>
                                     </td>
-                                    <td>
+                                    <td data-label="Self Rating" id="self-rating-cell-{{ skill.skill_id }}">
+                                        {% if skill.self_rated_level is not None %}
+                                            <span class="fw-bold">{{ skill.self_rated_level }}/5</span>
+                                            <span id="rating-status-badge-{{ skill.skill_id }}">
+                                                {% if skill.rating_status == 'pending' %}
+                                                    <span class="badge bg-warning ms-1">Pending</span>
+                                                {% elif skill.rating_status == 'approved' %}
+                                                    <span class="badge bg-success ms-1">Approved</span>
+                                                {% elif skill.rating_status == 'overridden' %}
+                                                    <span class="badge bg-secondary ms-1">Overridden</span>
+                                                {% endif %}
+                                            </span>
+                                            {% if can_rate_employee %}
+                                            <button type="button" class="btn btn-sm btn-outline-success mt-1 d-block"
+                                                    id="approve-btn-{{ skill.skill_id }}"
+                                                    onclick="approveSelfRating({{ employee.id }}, {{ skill.skill_id }})"
+                                                    {% if skill.rating_status != 'pending' %}style="display: none;"{% endif %}>
+                                                <i class="bi bi-check-lg me-1"></i>Approve
+                                            </button>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">Not rated</span>
+                                        {% endif %}
+                                    </td>
+                                    <td data-label="Manager Level">
                                         <div class="d-flex align-items-center gap-2">
-                                            {% if user.is_staff %}
+                                            {% if can_rate_employee %}
                                             <input type="number"
                                                    class="skill-level-input"
                                                    id="skill-{{ skill.skill_id }}"
@@ -354,14 +335,14 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td>
+                                    <td data-label="Gap" id="gap-cell-{{ skill.skill_id }}">
                                         {% if skill.gap > 0 %}
                                             <span class="text-danger fw-bold">-{{ skill.gap }}</span>
                                         {% else %}
                                             <span class="text-success">0</span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Status" id="status-cell-{{ skill.skill_id }}">
                                         {% if skill.status == 'met' %}
                                             <span class="badge bg-success">
                                                 <i class="bi bi-check-circle me-1"></i>Met
@@ -556,13 +537,56 @@
     function showTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        
+
         document.getElementById(tabId + '-tab').classList.add('active');
         event.target.classList.add('active');
+
+        // Chart.js sizes a canvas from its container at construction time, so a chart built
+        // inside a tab that starts hidden (display: none) can render blank. Dispatching a
+        // resize event once the tab becomes visible makes Chart.js re-measure and draw correctly.
+        window.dispatchEvent(new Event('resize'));
+    }
+
+    // Rebuild the Gap and Status cells from a JSON response shared by both endpoints below
+    function renderGapAndStatus(skillId, gap, status) {
+        const gapCell = document.getElementById(`gap-cell-${skillId}`);
+        if (gapCell) {
+            gapCell.innerHTML = gap > 0
+                ? `<span class="text-danger fw-bold">-${gap}</span>`
+                : `<span class="text-success">0</span>`;
+        }
+        const statusCell = document.getElementById(`status-cell-${skillId}`);
+        if (statusCell) {
+            const byStatus = {
+                met: '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Met</span>',
+                warning: '<span class="badge bg-warning"><i class="bi bi-exclamation-triangle me-1"></i>Warning</span>',
+                critical: '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Gap</span>',
+            };
+            statusCell.innerHTML = byStatus[status] || byStatus.critical;
+        }
+    }
+
+    function renderRatingBadge(skillId, ratingStatus) {
+        const badge = document.getElementById(`rating-status-badge-${skillId}`);
+        if (badge) {
+            const byStatus = {
+                pending: '<span class="badge bg-warning ms-1">Pending</span>',
+                approved: '<span class="badge bg-success ms-1">Approved</span>',
+                overridden: '<span class="badge bg-secondary ms-1">Overridden</span>',
+            };
+            badge.innerHTML = byStatus[ratingStatus] || '';
+        }
+        const approveBtn = document.getElementById(`approve-btn-${skillId}`);
+        if (approveBtn) {
+            approveBtn.style.display = ratingStatus === 'pending' ? '' : 'none';
+        }
     }
 
     // Update skill level via AJAX
     function updateSkill(employeeId, skillId, newLevel) {
+        const input = document.getElementById(`skill-${skillId}`);
+        input.disabled = true;
+
         fetch(`/employee/${employeeId}/skill-update/`, {
             method: 'POST',
             headers: {
@@ -574,23 +598,61 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Update the progress bar
                 document.getElementById(`bar-${skillId}`).style.width = (data.actual_level * 20) + '%';
-                
-                // Show success feedback
-                const input = document.getElementById(`skill-${skillId}`);
-                input.style.borderColor = '#10b981';
-                setTimeout(() => {
-                    input.style.borderColor = '#e2e8f0';
-                }, 1000);
-                
-                // Optionally reload to update all data
-                // location.reload();
+                renderGapAndStatus(skillId, data.gap, data.status);
+                if (data.rating_status) {
+                    renderRatingBadge(skillId, data.rating_status);
+                }
+                showToast('Skill level updated', 'success');
+            } else {
+                showToast('Failed to update skill level', 'danger');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Failed to update skill level');
+            showToast('Failed to update skill level', 'danger');
+        })
+        .finally(() => {
+            input.disabled = false;
+        });
+    }
+
+    // Accept the employee's self-rating as the official manager level
+    function approveSelfRating(employeeId, skillId) {
+        const btn = document.getElementById(`approve-btn-${skillId}`);
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Approving…';
+
+        fetch(`/employee/${employeeId}/skill/${skillId}/approve/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const input = document.getElementById(`skill-${skillId}`);
+                if (input) {
+                    input.value = data.actual_level;
+                }
+                document.getElementById(`bar-${skillId}`).style.width = (data.actual_level * 20) + '%';
+                renderGapAndStatus(skillId, data.gap, data.status);
+                renderRatingBadge(skillId, data.rating_status);
+                showToast('Self-rating approved', 'success');
+            } else {
+                showToast('Failed to approve rating', 'danger');
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Failed to approve rating', 'danger');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
         });
     }
 

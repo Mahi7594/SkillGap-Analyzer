@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .models import (
     RoleMatrix, Skill, SkillBenchmark, SkillMatrix, EmployeeSkill, EmployeeSkillHistory,
-    DevelopmentPlan,
+    DevelopmentPlan, user_can_manage_employee,
 )
 
 
@@ -206,3 +206,115 @@ class DevelopmentPlanAccessControlTests(TestCase):
         response = self.client.post(reverse('development_plan_delete', args=[new_plan.id]))
         self.assertEqual(response.status_code, 302)
         self.assertFalse(DevelopmentPlan.objects.filter(id=new_plan.id).exists())
+
+
+class SelfRatingModelTests(TestCase):
+    def setUp(self):
+        self.employee = SkillMatrix.objects.create(name='Ada Lovelace')
+        self.skill = Skill.objects.create(name='Python')
+
+    def test_rating_gap_none_without_self_rating(self):
+        es = EmployeeSkill.objects.create(skill_matrix=self.employee, skill=self.skill, actual_level=3)
+        self.assertIsNone(es.rating_gap)
+
+    def test_rating_gap_is_self_minus_actual(self):
+        es = EmployeeSkill.objects.create(
+            skill_matrix=self.employee, skill=self.skill, actual_level=2, self_rated_level=4,
+        )
+        self.assertEqual(es.rating_gap, 2)
+
+    def test_user_can_manage_employee_staff_always_true(self):
+        staff = User.objects.create_user('staff1', password='pass12345', is_staff=True)
+        self.assertTrue(user_can_manage_employee(staff, self.employee))
+
+    def test_user_can_manage_employee_true_for_own_manager(self):
+        manager_user = User.objects.create_user('mgr1', password='pass12345')
+        manager_employee = SkillMatrix.objects.create(name='Manager Mike', user=manager_user)
+        self.employee.manager = manager_employee
+        self.employee.save()
+        self.assertTrue(user_can_manage_employee(manager_user, self.employee))
+
+    def test_user_can_manage_employee_false_for_unrelated_user(self):
+        other_user = User.objects.create_user('other1', password='pass12345')
+        SkillMatrix.objects.create(name='Someone Else', user=other_user)
+        self.assertFalse(user_can_manage_employee(other_user, self.employee))
+
+
+class SelfRatingWorkflowTests(TestCase):
+    def setUp(self):
+        self.staff_user = User.objects.create_user('hr_admin2', password='pass12345', is_staff=True)
+        self.employee_user = User.objects.create_user('employee1', password='pass12345')
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        self.other_user = User.objects.create_user('other_employee', password='pass12345')
+
+        self.role = RoleMatrix.objects.create(title='Engineer')
+        self.skill = Skill.objects.create(name='Python')
+        SkillBenchmark.objects.create(role_matrix=self.role, skill=self.skill, required_level=4)
+
+        self.manager_employee = SkillMatrix.objects.create(name='Manager Mike', user=self.manager_user)
+        self.employee = SkillMatrix.objects.create(
+            name='Ada Lovelace', role_matrix=self.role, user=self.employee_user, manager=self.manager_employee,
+        )
+        self.unrelated_employee = SkillMatrix.objects.create(name='Someone Else', user=self.other_user)
+
+    def test_employee_can_submit_own_self_rating(self):
+        self.client.force_login(self.employee_user)
+        response = self.client.post(
+            reverse('employee_self_rating_update', args=[self.employee.id]),
+            {'skill_id': self.skill.id, 'self_rated_level': 3},
+        )
+        self.assertEqual(response.status_code, 200)
+        es = EmployeeSkill.objects.get(skill_matrix=self.employee, skill=self.skill)
+        self.assertEqual(es.self_rated_level, 3)
+        self.assertEqual(es.rating_status, 'pending')
+
+    def test_employee_cannot_submit_self_rating_for_someone_else(self):
+        self.client.force_login(self.employee_user)
+        response = self.client.post(
+            reverse('employee_self_rating_update', args=[self.unrelated_employee.id]),
+            {'skill_id': self.skill.id, 'self_rated_level': 3},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_approve_own_reports_self_rating(self):
+        EmployeeSkill.objects.create(
+            skill_matrix=self.employee, skill=self.skill, actual_level=2,
+            self_rated_level=4, rating_status='pending',
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.post(reverse('employee_skill_approve', args=[self.employee.id, self.skill.id]))
+        self.assertEqual(response.status_code, 200)
+        es = EmployeeSkill.objects.get(skill_matrix=self.employee, skill=self.skill)
+        self.assertEqual(es.actual_level, 4)
+        self.assertEqual(es.rating_status, 'approved')
+
+    def test_non_manager_cannot_approve_a_rating(self):
+        EmployeeSkill.objects.create(
+            skill_matrix=self.employee, skill=self.skill, actual_level=2,
+            self_rated_level=4, rating_status='pending',
+        )
+        self.client.force_login(self.other_user)
+        response = self.client.post(reverse('employee_skill_approve', args=[self.employee.id, self.skill.id]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_override_sets_status_overridden(self):
+        EmployeeSkill.objects.create(
+            skill_matrix=self.employee, skill=self.skill, actual_level=2,
+            self_rated_level=4, rating_status='pending',
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.post(
+            reverse('employee_skill_update', args=[self.employee.id]),
+            {'skill_id': self.skill.id, 'actual_level': 3},
+        )
+        self.assertEqual(response.status_code, 200)
+        es = EmployeeSkill.objects.get(skill_matrix=self.employee, skill=self.skill)
+        self.assertEqual(es.actual_level, 3)
+        self.assertEqual(es.rating_status, 'overridden')
+
+    def test_my_skills_view_handles_unlinked_account_gracefully(self):
+        unlinked_user = User.objects.create_user('unlinked1', password='pass12345')
+        self.client.force_login(unlinked_user)
+        response = self.client.get(reverse('my_skills'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['employee'])

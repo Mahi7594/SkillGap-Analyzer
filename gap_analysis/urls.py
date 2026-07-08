@@ -19,6 +19,8 @@ urlpatterns = [
     path('employee/<int:pk>/edit/', views.SkillMatrixUpdateView.as_view(), name='employee_update'),
     path('employee/<int:pk>/delete/', views.SkillMatrixDeleteView.as_view(), name='employee_delete'),
     path('employee/<int:pk>/skill-update/', views.employee_skill_update, name='employee_skill_update'),
+    path('employee/<int:pk>/self-rating-update/', views.employee_self_rating_update, name='employee_self_rating_update'),
+    path('employee/<int:pk>/skill/<int:skill_id>/approve/', views.employee_skill_approve, name='employee_skill_approve'),
     path('employee/<int:emp_id>/card/', views.SkillMatrixCardView.as_view(), name='employee_card'),
     
     # Skills URLs
@@ -53,4 +55,8 @@ urlpatterns = [
     path('plans/', views.DevelopmentPlanListView.as_view(), name='development_plan_list'),
     path('plans/<int:pk>/edit/', views.DevelopmentPlanUpdateView.as_view(), name='development_plan_update'),
     path('plans/<int:pk>/delete/', views.DevelopmentPlanDeleteView.as_view(), name='development_plan_delete'),
+
+    # Self vs. Manager Rating
+    path('my-skills/', views.MySkillsView.as_view(), name='my_skills'),
+    path('pending-reviews/', views.PendingReviewsListView.as_view(), name='pending_reviews'),
 ]

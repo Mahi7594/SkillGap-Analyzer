@@ -4,29 +4,6 @@
 
 {% block extra_css %}
 <style>
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-    }
-
-    .page-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: #1e293b;
-    }
-
-    .btn-icon {
-        width: 36px;
-        height: 36px;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-    }
-
     .skill-category {
         display: inline-flex;
         align-items: center;
@@ -37,13 +14,6 @@
         font-size: 0.875rem;
         color: #64748b;
     }
-
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
 </style>
 {% endblock %}
 
@@ -74,7 +44,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 mobile-cards">
                     <thead>
                         <tr>
                             <th>Skill Name</th>
@@ -86,10 +56,10 @@
                     <tbody>
                         {% for skill in skills %}
                         <tr>
-                            <td>
+                            <td data-label="Skill Name">
                                 <strong>{{ skill.name }}</strong>
                             </td>
-                            <td>
+                            <td data-label="Category">
                                 {% if skill.category %}
                                     <span class="skill-category">
                                         <i class="bi bi-tag"></i>{{ skill.category }}
@@ -98,14 +68,14 @@
                                     <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Used In Benchmarks">
                                 {% with skill.benchmark_set.count as benchmark_count %}
                                     <span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
                                         {{ benchmark_count }} benchmark{{ benchmark_count|pluralize }}
                                     </span>
                                 {% endwith %}
                             </td>
-                            <td>
+                            <td data-label="Actions">
                                 <div class="d-flex justify-content-end gap-2">
                                     {% if user.is_staff %}
                                     <a href="{% url 'skill_update' skill.id %}" class="btn btn-warning btn-icon" title="Edit">

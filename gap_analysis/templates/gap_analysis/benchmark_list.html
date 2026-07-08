@@ -2,59 +2,6 @@
 
 {% block title %}Benchmarks - Skill Gap Analyzer{% endblock %}
 
-{% block extra_css %}
-<style>
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-    }
-
-    .page-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: #1e293b;
-    }
-
-    .btn-icon {
-        width: 36px;
-        height: 36px;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-    }
-
-    .level-badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 32px;
-        height: 24px;
-        padding: 0 8px;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-
-    .level-0 { background: #f1f5f9; color: #64748b; }
-    .level-1 { background: #dbeafe; color: #1d4ed8; }
-    .level-2 { background: #d1fae5; color: #059669; }
-    .level-3 { background: #fef3c7; color: #d97706; }
-    .level-4 { background: #fed7aa; color: #ea580c; }
-    .level-5 { background: #fee2e2; color: #dc2626; }
-
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
-</style>
-{% endblock %}
-
 {% block content %}
 <div class="animate-fade-in">
     <div class="page-header">
@@ -70,7 +17,7 @@
     <div class="card">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 mobile-cards">
                     <thead>
                         <tr>
                             <th>Role</th>
@@ -83,29 +30,29 @@
                     <tbody>
                         {% for benchmark in benchmarks %}
                         <tr>
-                            <td>
+                            <td data-label="Role">
                                 <strong>{{ benchmark.role_matrix.title }}</strong>
                                 {% if benchmark.role_matrix.department %}
                                     <span class="badge bg-light text-muted ms-2">{{ benchmark.role_matrix.department }}</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Skill">
                                 <strong>{{ benchmark.skill.name }}</strong>
                                 {% if benchmark.skill.category %}
                                     <span class="badge bg-light text-muted ms-2">{{ benchmark.skill.category }}</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Required Level">
                                 <span class="level-badge level-{{ benchmark.required_level }}">{{ benchmark.required_level }}/5</span>
                             </td>
-                            <td>
+                            <td data-label="Mandatory">
                                 {% if benchmark.is_mandatory %}
                                     <span class="badge bg-danger">Mandatory</span>
                                 {% else %}
                                     <span class="badge bg-secondary">Optional</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Actions">
                                 <div class="d-flex justify-content-end gap-2">
                                     <a href="{% url 'designation_benchmark' benchmark.role_matrix.id %}" class="btn btn-info btn-icon" title="View Role">
                                         <i class="bi bi-eye"></i>

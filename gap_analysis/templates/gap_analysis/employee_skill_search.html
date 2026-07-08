@@ -1,22 +1,9 @@
 {% extends 'gap_analysis/base.html' %}
 
-{% block title %}Search Employees by Skill - Skill Gap Analyzer{% endblock %}
+{% block title %}Find Experts by Skill - Skill Gap Analyzer{% endblock %}
 
 {% block extra_css %}
 <style>
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-    }
-
-    .page-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: #1e293b;
-    }
-
     .search-container {
         max-width: 600px;
         margin: 0 auto 2rem;
@@ -69,19 +56,24 @@
         font-size: 0.875rem;
     }
 
-    .level-0 { background: #f1f5f9; color: #64748b; }
-    .level-1 { background: #dbeafe; color: #1d4ed8; }
-    .level-2 { background: #d1fae5; color: #059669; }
-    .level-3 { background: #fef3c7; color: #d97706; }
-    .level-4 { background: #fed7aa; color: #ea580c; }
-    .level-5 { background: #fee2e2; color: #dc2626; }
-
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
+    .rank-badge {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.875rem;
+        background: #f1f5f9;
+        color: #64748b;
+        flex: none;
     }
 
-    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
+    .rank-badge.top {
+        background: rgba(245, 158, 11, 0.15);
+        color: #d97706;
+    }
 </style>
 {% endblock %}
 
@@ -90,51 +82,63 @@
     <div class="page-header">
         <div>
             <h1 class="page-title">
-                <i class="bi bi-search me-2 text-primary"></i>Search Employees by Skill
+                <i class="bi bi-search me-2 text-primary"></i>Find Experts by Skill
             </h1>
-            <p class="text-muted mt-1">Find employees based on their skill proficiency</p>
+            <p class="text-muted mt-1">Pick a skill to see everyone rated on it, top scorers first</p>
         </div>
     </div>
 
     <div class="search-container">
         <form method="GET" action="{% url 'employee_skill_search' %}">
             <div class="input-group">
-                <input type="text" 
-                       name="q" 
-                       class="form-control search-input" 
-                       placeholder="Enter skill name to search..." 
-                       value="{{ query }}">
+                <select name="skill" class="form-select search-input" onchange="this.form.submit()">
+                    <option value="">Select a skill&hellip;</option>
+                    {% for skill in skills %}
+                        <option value="{{ skill.id }}" {% if selected_skill and selected_skill.id == skill.id %}selected{% endif %}>
+                            {{ skill.name }}{% if skill.category %} ({{ skill.category }}){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
                 <button type="submit" class="btn btn-primary ms-2">
-                    <i class="bi bi-search me-2"></i>Search
+                    <i class="bi bi-search me-2"></i>View
                 </button>
             </div>
         </form>
     </div>
 
-    {% if query %}
+    {% if selected_skill %}
         <div class="results-section">
             {% if results %}
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0">
-                        <i class="bi bi-people me-2"></i>{{ results|length }} employee{{ results|length|pluralize }} found
+                        <i class="bi bi-people me-2"></i>{{ results|length }} employee{{ results|length|pluralize }} rated on {{ selected_skill.name }}
                     </h5>
                 </div>
-                
+
                 {% for result in results %}
                 <div class="result-card">
                     <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="employee-name">{{ result.employee.name }}</div>
-                            <div class="employee-role">
-                                {% if result.employee.role_matrix %}
-                                    <i class="bi bi-briefcase me-1"></i>{{ result.employee.role_matrix.title }}
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="rank-badge {% if forloop.counter == 1 and result.level > 0 %}top{% endif %}">
+                                {% if forloop.counter == 1 and result.level > 0 %}
+                                    <i class="bi bi-trophy-fill"></i>
                                 {% else %}
-                                    <span class="text-muted">No designation</span>
+                                    {{ forloop.counter }}
                                 {% endif %}
+                            </div>
+                            <div>
+                                <div class="employee-name">{{ result.employee.name }}</div>
+                                <div class="employee-role">
+                                    {% if result.employee.role_matrix %}
+                                        <i class="bi bi-briefcase me-1"></i>{{ result.employee.role_matrix.title }}
+                                    {% else %}
+                                        <span class="text-muted">No designation</span>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
                         <div class="skill-badge level-{{ result.level }}">
-                            <i class="bi bi-star-fill me-1"></i>{{ result.skill }} - Level {{ result.level }}/5
+                            <i class="bi bi-star-fill me-1"></i>Level {{ result.level }}/5
                         </div>
                     </div>
                 </div>
@@ -142,14 +146,14 @@
             {% else %}
                 <div class="text-center py-5">
                     <i class="bi bi-emoji-frown display-1 text-muted"></i>
-                    <p class="mt-3 text-muted">No employees found with skill "{{ query }}"</p>
+                    <p class="mt-3 text-muted">No one has been rated on "{{ selected_skill.name }}" yet</p>
                 </div>
             {% endif %}
         </div>
     {% else %}
         <div class="text-center py-5">
             <i class="bi bi-search display-1 text-muted"></i>
-            <p class="mt-3 text-muted">Enter a skill name to search for employees</p>
+            <p class="mt-3 text-muted">Select a skill above to see who has it, ranked highest first</p>
         </div>
     {% endif %}
 </div>

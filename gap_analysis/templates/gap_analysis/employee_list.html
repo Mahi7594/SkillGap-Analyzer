@@ -4,19 +4,6 @@
 
 {% block extra_css %}
 <style>
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-    }
-
-    .page-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: #1e293b;
-    }
-
     .page-subtitle {
         color: #64748b;
         margin-top: 0.25rem;
@@ -44,16 +31,6 @@
         gap: 0.5rem;
     }
 
-    .btn-icon {
-        width: 36px;
-        height: 36px;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-    }
-
     .avatar {
         width: 40px;
         height: 40px;
@@ -70,21 +47,6 @@
     .table-hover tbody tr:hover {
         background-color: #f8fafc;
         transform: scale(1.01);
-    }
-
-    @keyframes fadeInUp {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-
-    .animate-fade-in {
-        animation: fadeInUp 0.5s ease forwards;
     }
 </style>
 {% endblock %}
@@ -150,7 +112,7 @@
     <div class="card">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 mobile-cards">
                     <thead>
                         <tr>
                             <th>Employee</th>
@@ -166,7 +128,7 @@
                     <tbody>
                         {% for employee in employees %}
                         <tr>
-                            <td>
+                            <td data-label="Employee">
                                 <div class="d-flex align-items-center">
                                     <div class="avatar me-3">
                                         {{ employee.name|make_list|first|upper }}
@@ -179,7 +141,7 @@
                                     </div>
                                 </div>
                             </td>
-                            <td>
+                            <td data-label="Designation">
                                 {% if employee.role_matrix %}
                                     <span class="badge bg-light text-dark">
                                         <i class="bi bi-briefcase me-1"></i>{{ employee.role_matrix.title }}
@@ -188,7 +150,7 @@
                                     <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Status">
                                 {% if employee.status == 'active' %}
                                     <span class="badge bg-success">
                                         <i class="bi bi-check-circle me-1"></i>Active
@@ -203,7 +165,7 @@
                                     </span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Total Skills">
                                 {% if employee.role_matrix and employee.role_matrix.benchmarks.exists %}
                                     {% with employee.role_matrix.benchmarks.count as total %}
                                     <span class="badge" style="background: rgba(79, 70, 229, 0.1); color: #4f46e5;">
@@ -214,7 +176,7 @@
                                 <span class="badge bg-warning">No role</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Avg Gap">
                                 {% if employee.role_matrix and employee.role_matrix.benchmarks.exists %}
                                 {% with employee.get_overall_gap_score as gap %}
                                     {% if gap > 1.5 %}
@@ -231,7 +193,7 @@
                                 <span class="badge bg-secondary">N/A</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Skills Met %">
                                 {% if employee.role_matrix and employee.role_matrix.benchmarks.exists %}
                                 {% with employee.get_skills_met_percentage as met_pct %}
                                     {% if met_pct >= 80 %}
@@ -246,16 +208,25 @@
                                 <span class="badge bg-secondary">-</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Training Req.">
                                 {% if employee.role_matrix and employee.role_matrix.benchmarks.exists %}
-                                <span class="badge bg-primary">
-                                    {% for g in employee.get_skill_gap_data %}{% if g.gap > 0 %}{{ g.skill.name }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}
-                                </span>
+                                    {% with employee.get_skills_needing_training as training_gaps %}
+                                        {% if training_gaps %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                                data-bs-toggle="modal" data-bs-target="#trainingReqModal"
+                                                data-employee-name="{{ employee.name }}"
+                                                data-skills="{% for g in training_gaps %}{{ g.skill.name }}{% if not forloop.last %}|{% endif %}{% endfor %}">
+                                            <i class="bi bi-list-check me-1"></i>{{ training_gaps|length }} skill{{ training_gaps|length|pluralize }}
+                                        </button>
+                                        {% else %}
+                                        <span class="badge bg-success">All skills met</span>
+                                        {% endif %}
+                                    {% endwith %}
                                 {% else %}
                                 <span class="badge bg-warning">No benchmarks</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Actions">
                                 <div class="action-buttons justify-content-end">
                                     <a href="{% url 'employee_profile' employee.id %}" class="btn btn-primary btn-icon" title="View Profile">
                                         <i class="bi bi-person"></i>
@@ -293,4 +264,38 @@
         {% include 'gap_analysis/pagination.html' %}
     </div>
 </div>
+
+<!-- Shared modal for the Training Req. button, populated per-row via data attributes -->
+<div class="modal fade" id="trainingReqModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-list-check me-2 text-primary"></i>Training Required &mdash; <span id="trainingReqEmployeeName"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="list-group" id="trainingReqSkillList"></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('trainingReqModal').addEventListener('show.bs.modal', function (event) {
+        const button = event.relatedTarget;
+        document.getElementById('trainingReqEmployeeName').textContent = button.getAttribute('data-employee-name');
+
+        const skills = button.getAttribute('data-skills').split('|').filter(Boolean);
+        const list = document.getElementById('trainingReqSkillList');
+        list.innerHTML = '';
+        skills.forEach(function (skillName) {
+            const item = document.createElement('li');
+            item.className = 'list-group-item';
+            item.textContent = skillName;
+            list.appendChild(item);
+        });
+    });
+</script>
 {% endblock %}

@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(DJANGO_DEBUG=True ./venv/Scripts/python.exe manage.py test gap_analysis -v 2)"
+      "Bash(DJANGO_DEBUG=True ./venv/Scripts/python.exe manage.py test gap_analysis -v 2)",
+      "WebSearch",
+      "Skill(artifact-design)",
+      "Skill(artifact-design:*)"
     ]
   }
 }

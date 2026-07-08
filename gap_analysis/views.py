@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import date
 
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse_lazy, reverse
@@ -15,7 +16,10 @@ from .forms import (
     RoleMatrixBenchmarkForm, DevelopmentPlanForm,
 )
 from .mixins import StaffRequiredMixin
-from .models import RoleMatrix, SkillBenchmark, SkillMatrix, EmployeeSkill, Skill, DevelopmentPlan, gap_weight
+from .models import (
+    RoleMatrix, SkillBenchmark, SkillMatrix, EmployeeSkill, Skill, DevelopmentPlan,
+    gap_weight, user_can_manage_employee,
+)
 
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'gap_analysis/dashboard.html'
@@ -598,6 +602,9 @@ class SkillMatrixProfileView(LoginRequiredMixin, DetailView):
                 'status': 'met' if gap <= 0 else ('warning' if gap <= 1 else 'critical'),
                 'is_mandatory': benchmark.is_mandatory,
                 'emp_skill_id': emp_skill.id if emp_skill else None,
+                'self_rated_level': emp_skill.self_rated_level if emp_skill else None,
+                'rating_status': emp_skill.rating_status if emp_skill else 'none',
+                'rating_gap': emp_skill.rating_gap if emp_skill else None,
             })
         
         # Sort by gap (critical first)
@@ -614,21 +621,23 @@ class SkillMatrixProfileView(LoginRequiredMixin, DetailView):
 
         context['skill_history'] = json.dumps(employee.get_skill_history())
         context['development_plans'] = employee.development_plans.select_related('skill')
+        context['can_rate_employee'] = user_can_manage_employee(self.request.user, employee)
+        context['is_own_profile'] = employee.user_id == self.request.user.id
 
         return context
 
 
 @login_required
 def employee_skill_update(request, pk):
-    """AJAX view to update employee skill level"""
-    if not request.user.is_staff:
+    """AJAX view for a manager (staff, or this employee's manager) to set the official skill level"""
+    skill_matrix = get_object_or_404(SkillMatrix, pk=pk)
+    if not user_can_manage_employee(request.user, skill_matrix):
         return JsonResponse({'success': False, 'error': 'Forbidden'}, status=403)
 
     if request.method == 'POST':
-        skill_matrix = get_object_or_404(SkillMatrix, pk=pk)
         skill_id = request.POST.get('skill_id')
         actual_level = int(request.POST.get('actual_level', 0))
-        
+
         if skill_id:
             skill = get_object_or_404(Skill, id=skill_id)
             emp_skill, created = EmployeeSkill.objects.update_or_create(
@@ -636,11 +645,15 @@ def employee_skill_update(request, pk):
                 skill=skill,
                 defaults={'actual_level': actual_level}
             )
-            
+
+            if emp_skill.self_rated_level is not None:
+                emp_skill.rating_status = 'approved' if actual_level == emp_skill.self_rated_level else 'overridden'
+                emp_skill.save(update_fields=['rating_status'])
+
             benchmark = SkillBenchmark.objects.filter(role_matrix=skill_matrix.role_matrix, skill=skill).first()
             required = benchmark.required_level if benchmark else 0
             gap = required - actual_level
-            
+
             return JsonResponse({
                 'success': True,
                 'emp_skill_id': emp_skill.id,
@@ -648,8 +661,68 @@ def employee_skill_update(request, pk):
                 'required_level': required,
                 'gap': gap,
                 'status': 'met' if gap <= 0 else ('warning' if gap <= 1 else 'critical'),
+                'rating_status': emp_skill.rating_status,
             })
     
+    return JsonResponse({'success': False, 'error': 'Invalid request'})
+
+
+@login_required
+def employee_self_rating_update(request, pk):
+    """AJAX view for an employee to submit their own self-rating."""
+    skill_matrix = get_object_or_404(SkillMatrix, pk=pk)
+    if skill_matrix.user_id != request.user.id:
+        return JsonResponse({'success': False, 'error': 'Forbidden'}, status=403)
+
+    if request.method == 'POST':
+        skill_id = request.POST.get('skill_id')
+        self_rated_level = int(request.POST.get('self_rated_level', 0))
+
+        if skill_id:
+            skill = get_object_or_404(Skill, id=skill_id)
+            emp_skill, created = EmployeeSkill.objects.update_or_create(
+                skill_matrix=skill_matrix,
+                skill=skill,
+                defaults={'self_rated_level': self_rated_level, 'self_rated_on': date.today(), 'rating_status': 'pending'},
+            )
+            return JsonResponse({
+                'success': True,
+                'emp_skill_id': emp_skill.id,
+                'self_rated_level': self_rated_level,
+                'rating_status': emp_skill.rating_status,
+            })
+
+    return JsonResponse({'success': False, 'error': 'Invalid request'})
+
+
+@login_required
+def employee_skill_approve(request, pk, skill_id):
+    """Accept the employee's self-rating as the official level, in one click."""
+    skill_matrix = get_object_or_404(SkillMatrix, pk=pk)
+    if not user_can_manage_employee(request.user, skill_matrix):
+        return JsonResponse({'success': False, 'error': 'Forbidden'}, status=403)
+
+    if request.method == 'POST':
+        emp_skill = get_object_or_404(EmployeeSkill, skill_matrix=skill_matrix, skill_id=skill_id)
+        if emp_skill.self_rated_level is not None:
+            emp_skill.actual_level = emp_skill.self_rated_level
+            emp_skill.rating_status = 'approved'
+            emp_skill.save()
+
+        benchmark = SkillBenchmark.objects.filter(role_matrix=skill_matrix.role_matrix, skill_id=skill_id).first()
+        required = benchmark.required_level if benchmark else 0
+        gap = required - emp_skill.actual_level
+
+        return JsonResponse({
+            'success': True,
+            'emp_skill_id': emp_skill.id,
+            'actual_level': emp_skill.actual_level,
+            'rating_status': emp_skill.rating_status,
+            'required_level': required,
+            'gap': gap,
+            'status': 'met' if gap <= 0 else ('warning' if gap <= 1 else 'critical'),
+        })
+
     return JsonResponse({'success': False, 'error': 'Invalid request'})
 
 
@@ -801,35 +874,76 @@ class DevelopmentPlanListView(LoginRequiredMixin, ListView):
         return context
 
 
+# --- Self vs. Manager Rating ---
+class MySkillsView(LoginRequiredMixin, TemplateView):
+    template_name = 'gap_analysis/my_skills.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        employee = SkillMatrix.objects.filter(user=self.request.user).first()
+        context['employee'] = employee
+
+        if employee:
+            skill_data = []
+            for benchmark in employee.get_required_benchmarks():
+                emp_skill = EmployeeSkill.objects.filter(skill_matrix=employee, skill=benchmark.skill).first()
+                skill_data.append({
+                    'skill_id': benchmark.skill.id,
+                    'skill_name': benchmark.skill.name,
+                    'skill_category': benchmark.skill.category,
+                    'required_level': benchmark.required_level,
+                    'actual_level': emp_skill.actual_level if emp_skill else 0,
+                    'self_rated_level': emp_skill.self_rated_level if emp_skill else None,
+                    'rating_status': emp_skill.rating_status if emp_skill else 'none',
+                })
+            context['skill_data'] = skill_data
+
+        return context
+
+
+class PendingReviewsListView(LoginRequiredMixin, ListView):
+    model = EmployeeSkill
+    template_name = 'gap_analysis/pending_reviews.html'
+    context_object_name = 'pending_ratings'
+    paginate_by = 20
+
+    def get_queryset(self):
+        queryset = EmployeeSkill.objects.filter(rating_status='pending').select_related('skill_matrix', 'skill')
+        if not self.request.user.is_staff:
+            manager_record = SkillMatrix.objects.filter(user=self.request.user).first()
+            queryset = queryset.filter(skill_matrix__manager=manager_record) if manager_record else queryset.none()
+        return queryset
+
+
 # --- Employee Skill Search ---
 class EmployeeSkillSearchView(LoginRequiredMixin, TemplateView):
     template_name = 'gap_analysis/employee_skill_search.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        query = self.request.GET.get('q', '').strip()
+        context['skills'] = Skill.objects.all().order_by('name')
 
-        if query:
+        selected_skill = None
+        results = []
+
+        skill_id = self.request.GET.get('skill')
+        if skill_id:
+            selected_skill = Skill.objects.filter(id=skill_id).first()
+
+        if selected_skill:
             matching_skills = EmployeeSkill.objects.filter(
-                skill__name__icontains=query
-            ).select_related('skill_matrix__role_matrix', 'skill')
+                skill=selected_skill
+            ).select_related('skill_matrix__role_matrix', 'skill').order_by('-actual_level', 'skill_matrix__name')
 
-            skill_results = [
+            results = [
                 {
                     'employee': es.skill_matrix,
                     'skill': es.skill.name,
                     'level': es.actual_level,
-                    'required': None,
-                    'gap': None,
                 }
                 for es in matching_skills
             ]
 
-            skill_results.sort(key=lambda x: x['level'], reverse=True)
-            context['query'] = query
-            context['results'] = skill_results
-        else:
-            context['query'] = ''
-            context['results'] = []
-
+        context['selected_skill'] = selected_skill
+        context['results'] = results
         return context

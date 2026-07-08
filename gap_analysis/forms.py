@@ -93,22 +93,26 @@ class DevelopmentPlanForm(BootstrapFormMixin, forms.ModelForm):
 class SkillMatrixForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = SkillMatrix
-        fields = ['name', 'email', 'role_matrix', 'status', 'join_date']
+        fields = ['name', 'email', 'role_matrix', 'status', 'join_date', 'user']
         labels = {
             'role_matrix': 'Designation',
+            'user': 'Linked Login (for self-service rating)',
         }
         widgets = {
             'join_date': forms.DateInput(attrs={'type': 'date'}),
             'email': forms.EmailInput(attrs={'placeholder': 'email@example.com'}),
         }
 
-class EmployeeSkillForm(forms.ModelForm):
+class EmployeeSkillForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = EmployeeSkill
-        fields = ['actual_level', 'notes']
+        fields = ['skill_matrix', 'skill', 'actual_level', 'notes']
+        labels = {
+            'skill_matrix': 'Employee',
+        }
         widgets = {
-            'actual_level': forms.NumberInput(attrs={'min': 0, 'max': 5, 'class': 'form-control'}),
-            'notes': forms.Textarea(attrs={'rows': 2, 'class': 'form-control', 'placeholder': 'Optional notes'}),
+            'actual_level': forms.NumberInput(attrs={'min': 0, 'max': 5}),
+            'notes': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Optional notes'}),
         }
 
 class EmployeeSkillInlineForm(forms.ModelForm):

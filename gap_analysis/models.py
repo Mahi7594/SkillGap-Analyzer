@@ -15,6 +15,16 @@ def gap_weight(is_mandatory):
     return MANDATORY_GAP_WEIGHT if is_mandatory else OPTIONAL_GAP_WEIGHT
 
 
+def user_can_manage_employee(user, employee):
+    """Staff can manage any employee's ratings; a manager can manage only their own reports."""
+    if not user.is_authenticated:
+        return False
+    if user.is_staff:
+        return True
+    manager_record = SkillMatrix.objects.filter(user=user).first()
+    return bool(manager_record and employee.manager_id == manager_record.id)
+
+
 class RoleMatrix(models.Model):
     title = models.CharField(max_length=100, help_text="Role/Job Title")
     department = models.CharField(max_length=100, blank=True, null=True, help_text="Department name")
@@ -145,6 +155,9 @@ class SkillMatrix(models.Model):
 
         return gaps
 
+    def get_skills_needing_training(self):
+        return [g for g in self.get_skill_gap_data() if g['gap'] > 0]
+
     def get_overall_gap_score(self):
         gaps = self.get_skill_gap_data()
         if not gaps:
@@ -195,6 +208,13 @@ class SkillMatrix(models.Model):
         return history
 
 class EmployeeSkill(models.Model):
+    RATING_STATUS_CHOICES = [
+        ('none', 'No Self-Rating'),
+        ('pending', 'Pending Review'),
+        ('approved', 'Approved'),
+        ('overridden', 'Overridden'),
+    ]
+
     skill_matrix = models.ForeignKey(SkillMatrix, on_delete=models.CASCADE, related_name='skills')
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name='employee_skills')
     actual_level = models.IntegerField(
@@ -203,18 +223,33 @@ class EmployeeSkill(models.Model):
     )
     notes = models.TextField(blank=True, null=True)
     last_evaluated = models.DateField(auto_now=True)
-    
+
+    # Self vs. manager rating: the employee's own assessment, pending manager approval.
+    # actual_level above remains the single official value used in every gap calculation.
+    self_rated_level = models.IntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(5)]
+    )
+    self_rated_on = models.DateField(null=True, blank=True)
+    rating_status = models.CharField(max_length=20, choices=RATING_STATUS_CHOICES, default='none')
+
     class Meta:
         unique_together = ('skill_matrix', 'skill')
         ordering = ['skill__name']
-    
+
     def __str__(self):
         return f"{self.skill_matrix.name} - {self.skill.name}: {self.actual_level}"
-    
+
     @property
     def employee(self):
         return self.skill_matrix
-    
+
+    @property
+    def rating_gap(self):
+        if self.self_rated_level is None:
+            return None
+        return self.self_rated_level - self.actual_level
+
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         old_level = None if is_new else EmployeeSkill.objects.get(pk=self.pk).actual_level

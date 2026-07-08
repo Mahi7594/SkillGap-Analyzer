@@ -2,40 +2,6 @@
 
 {% block title %}Manage Designations - Skill Gap Analyzer{% endblock %}
 
-{% block extra_css %}
-<style>
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-    }
-
-    .page-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: #1e293b;
-    }
-
-    .btn-icon {
-        width: 36px;
-        height: 36px;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-    }
-
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
-</style>
-{% endblock %}
-
 {% block content %}
 <div class="animate-fade-in">
     <div class="page-header">
@@ -55,7 +21,7 @@
     <div class="card">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 mobile-cards">
                     <thead>
                         <tr>
                             <th>Designation</th>
@@ -67,10 +33,10 @@
                     <tbody>
                         {% for designation in designations %}
                         <tr>
-                            <td>
+                            <td data-label="Designation">
                                 <strong>{{ designation.title }}</strong>
                             </td>
-                            <td>
+                            <td data-label="Department">
                                 {% if designation.department %}
                                     <span class="badge bg-light text-dark">
                                         <i class="bi bi-building me-1"></i>{{ designation.department }}
@@ -79,12 +45,12 @@
                                     <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Required Skills">
                                 <span class="badge" style="background: rgba(79, 70, 229, 0.1); color: #4f46e5;">
                                     {{ designation.benchmarks.count }}
                                 </span>
                             </td>
-                            <td>
+                            <td data-label="Actions">
                                 <div class="d-flex justify-content-end gap-2">
                                     <a href="{% url 'designation_benchmark' designation.id %}" class="btn btn-info btn-icon" title="Manage Benchmark">
                                         <i class="bi bi-bookmark-check"></i>
