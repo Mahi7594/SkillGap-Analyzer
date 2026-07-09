@@ -599,7 +599,10 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                document.getElementById(`bar-${skillId}`).style.width = (data.actual_level * 20) + '%';
+                const bar = document.getElementById(`bar-${skillId}`);
+                if (bar) {
+                    bar.style.width = (data.actual_level * 20) + '%';
+                }
                 renderGapAndStatus(skillId, data.gap, data.status);
                 if (data.rating_status) {
                     renderRatingBadge(skillId, data.rating_status);
@@ -639,19 +642,27 @@
                 if (input) {
                     input.value = data.actual_level;
                 }
-                document.getElementById(`bar-${skillId}`).style.width = (data.actual_level * 20) + '%';
+                const bar = document.getElementById(`bar-${skillId}`);
+                if (bar) {
+                    bar.style.width = (data.actual_level * 20) + '%';
+                }
                 renderGapAndStatus(skillId, data.gap, data.status);
                 renderRatingBadge(skillId, data.rating_status);
                 showToast('Self-rating approved', 'success');
             } else {
                 showToast('Failed to approve rating', 'danger');
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
             }
         })
         .catch(error => {
             console.error('Error:', error);
             showToast('Failed to approve rating', 'danger');
+        })
+        .finally(() => {
+            // Always resolve the button's "Approving…" state, no matter what happened
+            // above — including a DOM update throwing partway through, which previously
+            // left it stuck spinning forever even after the approval had succeeded.
+            // If renderRatingBadge already hid the button (the success path), resetting
+            // its disabled/text here is harmless since it's no longer visible.
             btn.disabled = false;
             btn.innerHTML = originalHtml;
         });
