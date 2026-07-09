@@ -9,6 +9,7 @@ from .models import (
     RoleMatrix, Skill, SkillBenchmark, SkillMatrix, EmployeeSkill, EmployeeSkillHistory,
     DevelopmentPlan, user_can_manage_employee,
 )
+from .views import safe_json
 
 
 class GapScoringTests(TestCase):
@@ -318,3 +319,121 @@ class SelfRatingWorkflowTests(TestCase):
         response = self.client.get(reverse('my_skills'))
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.context['employee'])
+
+
+class RoleMatrixQuerysetTests(TestCase):
+    """get_required_benchmarks()/get_missing_benchmarks() must always return a QuerySet,
+    never a plain list, since callers chain .values_list()/.filter() onto the result."""
+
+    def test_get_required_benchmarks_is_chainable_without_a_role(self):
+        employee = SkillMatrix.objects.create(name='No Role')
+        skill_ids = employee.get_required_benchmarks().values_list('skill_id', flat=True)
+        self.assertEqual(list(skill_ids), [])
+
+    def test_get_missing_benchmarks_is_chainable_without_a_role(self):
+        employee = SkillMatrix.objects.create(name='No Role')
+        self.assertEqual(list(employee.get_missing_benchmarks()), [])
+
+
+class DevelopmentPlanFormForRoleLessEmployeeTests(TestCase):
+    """Regression test: DevelopmentPlanCreateView/UpdateView crashed with AttributeError
+    for any employee with no role_matrix, because get_required_benchmarks() used to
+    return a plain list and .values_list() was called on it directly."""
+
+    def setUp(self):
+        self.staff_user = User.objects.create_user('hr_admin3', password='pass12345', is_staff=True)
+        self.employee = SkillMatrix.objects.create(name='No Role Employee')
+        self.skill = Skill.objects.create(name='Python')
+
+    def test_create_form_loads_for_employee_without_a_role(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('development_plan_add', args=[self.employee.id]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_update_form_loads_for_employee_without_a_role(self):
+        self.client.force_login(self.staff_user)
+        plan = DevelopmentPlan.objects.create(
+            skill_matrix=self.employee, skill=self.skill, action='Take a course',
+        )
+        response = self.client.get(reverse('development_plan_update', args=[plan.id]))
+        self.assertEqual(response.status_code, 200)
+
+
+class ConfirmDeletePageTests(TestCase):
+    """Regression tests: several confirm-delete templates referenced context variables
+    Django's DeleteView never actually provides (e.g. {{ employee.name }} when only
+    {{ object }} is set), and benchmark_confirm_delete.html used a nonexistent
+    `object.designation` field inside a {% url %} tag, which raised NoReverseMatch."""
+
+    def setUp(self):
+        self.staff_user = User.objects.create_user('hr_admin4', password='pass12345', is_staff=True)
+        self.client.force_login(self.staff_user)
+        self.role = RoleMatrix.objects.create(title='Engineer')
+        self.skill = Skill.objects.create(name='Python')
+        self.employee = SkillMatrix.objects.create(name='Ada Lovelace', role_matrix=self.role)
+        self.benchmark = SkillBenchmark.objects.create(role_matrix=self.role, skill=self.skill, required_level=3)
+
+    def test_employee_delete_confirm_shows_employee_name(self):
+        response = self.client.get(reverse('employee_delete', args=[self.employee.id]))
+        self.assertContains(response, 'Ada Lovelace')
+
+    def test_designation_delete_confirm_shows_role_title(self):
+        response = self.client.get(reverse('designation_delete', args=[self.role.id]))
+        self.assertContains(response, 'Engineer')
+
+    def test_benchmark_delete_confirm_renders_without_error(self):
+        response = self.client.get(reverse('benchmark_delete', args=[self.benchmark.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Engineer')
+
+    def test_designation_benchmark_delete_confirm_renders_without_error(self):
+        response = self.client.get(reverse('designation_benchmark_delete', args=[self.benchmark.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Engineer')
+
+    def test_employee_card_shows_role_title_not_placeholder(self):
+        response = self.client.get(reverse('employee_card', args=[self.employee.id]))
+        self.assertContains(response, 'Engineer')
+        self.assertNotContains(response, 'No designation assigned')
+
+
+class SafeJsonTests(TestCase):
+    """A skill/employee name containing "</script>" must not be able to close the
+    surrounding <script> block early when embedded via {{ ... |safe }}."""
+
+    def test_escapes_script_closing_tag(self):
+        rendered = safe_json(['</script><script>alert(1)</script>'])
+        self.assertNotIn('</script>', rendered)
+        self.assertIn('\\u003c/script\\u003e', rendered)
+
+    def test_still_valid_json_content_for_plain_values(self):
+        rendered = safe_json(['Python', 3])
+        self.assertIn('"Python"', rendered)
+        self.assertIn('3', rendered)
+
+
+class MalformedInputTests(TestCase):
+    """Non-numeric POST values must return a clean error, not an uncaught ValueError."""
+
+    def setUp(self):
+        self.staff_user = User.objects.create_user('hr_admin5', password='pass12345', is_staff=True)
+        self.employee = SkillMatrix.objects.create(name='Ada Lovelace')
+        self.skill = Skill.objects.create(name='Python')
+
+    def test_employee_skill_update_rejects_non_numeric_level(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            reverse('employee_skill_update', args=[self.employee.id]),
+            {'skill_id': self.skill.id, 'actual_level': 'not-a-number'},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_bulk_skill_update_rejects_non_numeric_level(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.post(reverse('bulk_skill_update'), {
+            'employee_ids': [self.employee.id],
+            'skill_id': self.skill.id,
+            'actual_level': 'not-a-number',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(EmployeeSkill.objects.filter(skill_matrix=self.employee, skill=self.skill).exists())

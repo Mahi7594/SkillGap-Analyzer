@@ -118,14 +118,14 @@ class SkillMatrix(models.Model):
     def get_required_benchmarks(self):
         if self.role_matrix:
             return self.role_matrix.benchmarks.select_related('skill').all()
-        return []
-    
+        return SkillBenchmark.objects.none()
+
     def has_benchmarks(self):
-        return self.role_matrix and self.role_matrix.benchmarks.exists()
-    
+        return bool(self.role_matrix and self.role_matrix.benchmarks.exists())
+
     def get_missing_benchmarks(self):
         if not self.role_matrix:
-            return []
+            return Skill.objects.none()
         required_skills = set(b.skill.id for b in self.role_matrix.benchmarks.all())
         recorded_skills = set(s.skill.id for s in self.skills.all())
         missing = required_skills - recorded_skills

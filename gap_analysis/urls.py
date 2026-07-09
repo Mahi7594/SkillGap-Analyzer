@@ -59,4 +59,7 @@ urlpatterns = [
     # Self vs. Manager Rating
     path('my-skills/', views.MySkillsView.as_view(), name='my_skills'),
     path('pending-reviews/', views.PendingReviewsListView.as_view(), name='pending_reviews'),
+
+    # Help
+    path('help/', views.HelpView.as_view(), name='help'),
 ]

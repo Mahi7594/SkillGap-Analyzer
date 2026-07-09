@@ -485,6 +485,11 @@
                             <li><a class="dropdown-item" href="{% url 'pending_reviews' %}"><i class="bi bi-hourglass-split me-2"></i>Pending Reviews</a></li>
                         </ul>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'help' %}active{% endif %}" href="{% url 'help' %}" title="Help &amp; Guide">
+                            <i class="bi bi-question-circle me-1"></i> Help
+                        </a>
+                    </li>
                     <li class="nav-item d-flex align-items-center ms-lg-2">
                         <span class="text-white-50 small me-2">
                             <i class="bi bi-person-circle me-1"></i>{{ user.get_username }}{% if user.is_staff %} <span class="badge bg-light text-dark ms-1">staff</span>{% endif %}

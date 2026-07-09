@@ -20,7 +20,7 @@
             <div class="card-body py-5">
                 <div class="delete-icon"><i class="bi bi-exclamation-triangle"></i></div>
                 <h2 class="delete-title">Delete Designation</h2>
-                <p class="delete-message">Are you sure you want to permanently delete <strong>{{ designation.title }}</strong>?</p>
+                <p class="delete-message">Are you sure you want to permanently delete <strong>{{ object.title }}</strong>?</p>
                 <div class="delete-warning"><i class="bi bi-info-circle me-2"></i>This will also permanently delete all skill benchmarks associated with this role.</div>
                 <form method="POST" class="btn-group-delete">
                     {% csrf_token %}

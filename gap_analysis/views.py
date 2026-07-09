@@ -21,6 +21,17 @@ from .models import (
     gap_weight, user_can_manage_employee,
 )
 
+
+def safe_json(data):
+    """json.dumps() with <, >, & escaped, for embedding directly inside a <script> tag.
+
+    Without this, a skill or employee name containing the literal text "</script>" would
+    close the surrounding script block early (the HTML parser looks for that sequence
+    regardless of JS string context), which is a stored-XSS vector since skill/employee
+    names are free text. Mirrors what Django's own `json_script` template filter does.
+    """
+    return json.dumps(data).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'gap_analysis/dashboard.html'
 
@@ -260,15 +271,15 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             'selected_employee': selected_employee,
             'designations': designations,
             'selected_designation': selected_designation,
-            'ind_labels': json.dumps(ind_labels),
-            'ind_actual': json.dumps(ind_actual),
-            'ind_benchmark': json.dumps(ind_benchmark),
-            'team_labels': json.dumps(team_labels),
-            'team_actual': json.dumps(team_actual),
-            'team_benchmark': json.dumps(team_benchmark),
-            'desig_labels': json.dumps(desig_labels),
-            'desig_actual': json.dumps(desig_actual),
-            'desig_benchmark': json.dumps(desig_benchmark),
+            'ind_labels': safe_json(ind_labels),
+            'ind_actual': safe_json(ind_actual),
+            'ind_benchmark': safe_json(ind_benchmark),
+            'team_labels': safe_json(team_labels),
+            'team_actual': safe_json(team_actual),
+            'team_benchmark': safe_json(team_benchmark),
+            'desig_labels': safe_json(desig_labels),
+            'desig_actual': safe_json(desig_actual),
+            'desig_benchmark': safe_json(desig_benchmark),
             'total_employees': total_employees,
             'total_skills': total_skills,
             'avg_gap_score': avg_gap_score,
@@ -397,8 +408,6 @@ class SkillDeleteView(LoginRequiredMixin, StaffRequiredMixin, SuccessMessageMixi
     success_url = reverse_lazy('skill_list')
     success_message = "Skill deleted successfully!"
 
-from django.core.paginator import Paginator
-
 # --- EMPLOYEE CRUD VIEWS ---
 class SkillMatrixListView(LoginRequiredMixin, ListView):
     model = SkillMatrix
@@ -479,8 +488,12 @@ class BulkSkillUpdateView(LoginRequiredMixin, StaffRequiredMixin, TemplateView):
     def post(self, request):
         employee_ids = request.POST.getlist('employee_ids')
         skill_id = request.POST.get('skill_id')
-        actual_level = int(request.POST.get('actual_level', 0))
-        
+        try:
+            actual_level = int(request.POST.get('actual_level', 0))
+        except (TypeError, ValueError):
+            messages.error(request, "Skill level must be a number between 0 and 5.")
+            return redirect('bulk_skill_update')
+
         if employee_ids and skill_id:
             skill = get_object_or_404(Skill, id=skill_id)
             employees = SkillMatrix.objects.filter(id__in=employee_ids)
@@ -615,11 +628,11 @@ class SkillMatrixProfileView(LoginRequiredMixin, DetailView):
         context['overall_gap'] = employee.get_overall_gap_score()
         
         # Chart data
-        context['chart_labels'] = json.dumps([s['skill_name'] for s in skill_data])
-        context['chart_actual'] = json.dumps([s['actual_level'] for s in skill_data])
-        context['chart_required'] = json.dumps([s['required_level'] for s in skill_data])
+        context['chart_labels'] = safe_json([s['skill_name'] for s in skill_data])
+        context['chart_actual'] = safe_json([s['actual_level'] for s in skill_data])
+        context['chart_required'] = safe_json([s['required_level'] for s in skill_data])
 
-        context['skill_history'] = json.dumps(employee.get_skill_history())
+        context['skill_history'] = safe_json(employee.get_skill_history())
         context['development_plans'] = employee.development_plans.select_related('skill')
         context['can_rate_employee'] = user_can_manage_employee(self.request.user, employee)
         context['is_own_profile'] = employee.user_id == self.request.user.id
@@ -636,7 +649,10 @@ def employee_skill_update(request, pk):
 
     if request.method == 'POST':
         skill_id = request.POST.get('skill_id')
-        actual_level = int(request.POST.get('actual_level', 0))
+        try:
+            actual_level = int(request.POST.get('actual_level', 0))
+        except (TypeError, ValueError):
+            return JsonResponse({'success': False, 'error': 'actual_level must be a number'}, status=400)
 
         if skill_id:
             skill = get_object_or_404(Skill, id=skill_id)
@@ -676,7 +692,10 @@ def employee_self_rating_update(request, pk):
 
     if request.method == 'POST':
         skill_id = request.POST.get('skill_id')
-        self_rated_level = int(request.POST.get('self_rated_level', 0))
+        try:
+            self_rated_level = int(request.POST.get('self_rated_level', 0))
+        except (TypeError, ValueError):
+            return JsonResponse({'success': False, 'error': 'self_rated_level must be a number'}, status=400)
 
         if skill_id:
             skill = get_object_or_404(Skill, id=skill_id)
@@ -947,3 +966,7 @@ class EmployeeSkillSearchView(LoginRequiredMixin, TemplateView):
         context['selected_skill'] = selected_skill
         context['results'] = results
         return context
+
+
+class HelpView(LoginRequiredMixin, TemplateView):
+    template_name = 'gap_analysis/help.html'
