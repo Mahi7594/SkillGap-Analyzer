@@ -333,14 +333,16 @@ class SkillMatrixCardView(LoginRequiredMixin, DetailView):
             })
             
         context['skill_details'] = skill_details
-        
+
         if skill_details:
             proficient_count = sum(1 for s in skill_details if s['gap'] <= 0)
             skills_met_pct = round((proficient_count / len(skill_details)) * 100)
         else:
             skills_met_pct = 0
         context['skills_met_pct'] = skills_met_pct
-        
+
+        context['development_plans'] = employee.development_plans.select_related('skill').all()
+
         return context
 
 # --- CREATE VIEWS ---

@@ -397,6 +397,20 @@ class ConfirmDeletePageTests(TestCase):
         self.assertContains(response, 'Engineer')
         self.assertNotContains(response, 'No designation assigned')
 
+    def test_employee_card_shows_development_plans(self):
+        DevelopmentPlan.objects.create(
+            skill_matrix=self.employee, skill=self.skill, action='Take a Python course',
+            status='in_progress',
+        )
+        response = self.client.get(reverse('employee_card', args=[self.employee.id]))
+        self.assertContains(response, 'Development Plans')
+        self.assertContains(response, 'Take a Python course')
+        self.assertContains(response, 'In Progress')
+
+    def test_employee_card_hides_development_plans_section_when_none(self):
+        response = self.client.get(reverse('employee_card', args=[self.employee.id]))
+        self.assertNotContains(response, 'Development Plans')
+
 
 class SafeJsonTests(TestCase):
     """A skill/employee name containing "</script>" must not be able to close the

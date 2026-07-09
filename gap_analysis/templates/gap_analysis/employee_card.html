@@ -193,6 +193,56 @@
         .gap-critical { border-left: 4px solid #ef4444; }
         .gap-warning { border-left: 4px solid #f59e0b; }
         .gap-met { border-left: 4px solid #10b981; }
+
+        .plans-section { margin-top: 2rem; }
+
+        .plan-row {
+            padding: 1rem;
+            border: 1px solid #f1f5f9;
+            border-radius: 12px;
+            margin-bottom: 0.75rem;
+        }
+
+        .plan-row:last-child { margin-bottom: 0; }
+
+        .plan-skill {
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #4f46e5;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 0 0 4px 0;
+        }
+
+        .plan-action {
+            font-weight: 600;
+            color: #1e293b;
+            margin: 0 0 4px 0;
+        }
+
+        .plan-meta {
+            font-size: 0.8125rem;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .plan-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .plan-status-not_started { background-color: rgba(100, 116, 139, 0.1); color: #64748b; }
+        .plan-status-in_progress { background-color: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .plan-status-completed { background-color: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .plan-status-cancelled { background-color: rgba(100, 116, 139, 0.1); color: #64748b; }
+
+        .plan-overdue { color: #ef4444; font-weight: 600; }
         
         .print-btn {
             text-align: center;
@@ -291,8 +341,38 @@
                     No skills recorded for this employee yet.
                 </div>
             {% endfor %}
+
+            {% if development_plans %}
+                <div class="plans-section">
+                    <h3 class="section-title">
+                        <i class="bi bi-signpost-2"></i>Development Plans
+                    </h3>
+                    {% for plan in development_plans %}
+                        <div class="plan-row">
+                            <p class="plan-skill">{{ plan.skill.name }}</p>
+                            <p class="plan-action">
+                                {{ plan.action }}
+                                {% if plan.resource_url %}
+                                    <a href="{{ plan.resource_url }}" target="_blank" rel="noopener" title="Open resource">
+                                        <i class="bi bi-box-arrow-up-right"></i>
+                                    </a>
+                                {% endif %}
+                            </p>
+                            <div class="plan-meta">
+                                {% if plan.target_date %}
+                                    <span class="{% if plan.is_overdue %}plan-overdue{% endif %}">
+                                        <i class="bi bi-calendar-event"></i> Target: {{ plan.target_date }}
+                                        {% if plan.is_overdue %}<i class="bi bi-exclamation-triangle ms-1" title="Overdue"></i>{% endif %}
+                                    </span>
+                                {% endif %}
+                                <span class="plan-status plan-status-{{ plan.status }}">{{ plan.get_status_display }}</span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
         </div>
-        
+
         <div class="print-btn">
             <button class="btn-print" onclick="window.print()">
                 <i class="bi bi-printer"></i> Print / Save to PDF
