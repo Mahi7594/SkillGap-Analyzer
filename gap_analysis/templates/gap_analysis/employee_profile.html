@@ -306,11 +306,12 @@
                                                 {% endif %}
                                             </span>
                                             {% if can_rate_employee %}
-                                            <button type="button" class="btn btn-sm btn-outline-success mt-1 d-block"
+                                            <button type="button" class="btn btn-sm {% if skill.has_active_development_plan %}btn-outline-secondary{% else %}btn-outline-success{% endif %} mt-1 d-block"
                                                     id="approve-btn-{{ skill.skill_id }}"
                                                     onclick="approveSelfRating({{ employee.id }}, {{ skill.skill_id }})"
-                                                    {% if skill.rating_status != 'pending' %}style="display: none;"{% endif %}>
-                                                <i class="bi bi-check-lg me-1"></i>Approve
+                                                    {% if skill.rating_status != 'pending' %}style="display: none;"{% endif %}
+                                                    {% if skill.has_active_development_plan %}disabled title="Blocked: mark this skill's development plan Completed before approving"{% endif %}>
+                                                <i class="bi bi-{% if skill.has_active_development_plan %}lock{% else %}check-lg{% endif %} me-1"></i>{% if skill.has_active_development_plan %}Blocked{% else %}Approve{% endif %}
                                             </button>
                                             {% endif %}
                                         {% else %}
@@ -650,7 +651,7 @@
                 renderRatingBadge(skillId, data.rating_status);
                 showToast('Self-rating approved', 'success');
             } else {
-                showToast('Failed to approve rating', 'danger');
+                showToast(data.error || 'Failed to approve rating', 'danger');
             }
         })
         .catch(error => {

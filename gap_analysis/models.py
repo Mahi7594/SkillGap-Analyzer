@@ -250,6 +250,15 @@ class EmployeeSkill(models.Model):
             return None
         return self.self_rated_level - self.actual_level
 
+    @property
+    def has_active_development_plan(self):
+        """A development plan a manager hasn't yet marked Completed/Cancelled blocks
+        approving this skill's self-rating — the gap it was raised for isn't considered
+        closed just because the employee re-rated themselves higher."""
+        return DevelopmentPlan.objects.filter(
+            skill_matrix_id=self.skill_matrix_id, skill_id=self.skill_id,
+        ).exclude(status__in=['completed', 'cancelled']).exists()
+
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         old_level = None if is_new else EmployeeSkill.objects.get(pk=self.pk).actual_level

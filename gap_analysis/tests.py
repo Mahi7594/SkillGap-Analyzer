@@ -321,6 +321,88 @@ class SelfRatingWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.context['employee'])
 
+    def test_approve_blocked_while_development_plan_is_active(self):
+        EmployeeSkill.objects.create(
+            skill_matrix=self.employee, skill=self.skill, actual_level=2,
+            self_rated_level=4, rating_status='pending',
+        )
+        DevelopmentPlan.objects.create(
+            skill_matrix=self.employee, skill=self.skill, action='Take a course', status='in_progress',
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.post(reverse('employee_skill_approve', args=[self.employee.id, self.skill.id]))
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(response.json()['success'])
+        es = EmployeeSkill.objects.get(skill_matrix=self.employee, skill=self.skill)
+        self.assertEqual(es.actual_level, 2)
+        self.assertEqual(es.rating_status, 'pending')
+
+    def test_approve_allowed_once_development_plan_is_completed(self):
+        EmployeeSkill.objects.create(
+            skill_matrix=self.employee, skill=self.skill, actual_level=2,
+            self_rated_level=4, rating_status='pending',
+        )
+        DevelopmentPlan.objects.create(
+            skill_matrix=self.employee, skill=self.skill, action='Take a course', status='completed',
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.post(reverse('employee_skill_approve', args=[self.employee.id, self.skill.id]))
+        self.assertEqual(response.status_code, 200)
+        es = EmployeeSkill.objects.get(skill_matrix=self.employee, skill=self.skill)
+        self.assertEqual(es.actual_level, 4)
+        self.assertEqual(es.rating_status, 'approved')
+
+    def test_manager_entering_matching_level_stays_pending_while_plan_active(self):
+        """Even if the manager's own entry happens to match the employee's self-rating,
+        that must not silently count as approval while a development plan is still open."""
+        EmployeeSkill.objects.create(
+            skill_matrix=self.employee, skill=self.skill, actual_level=2,
+            self_rated_level=4, rating_status='pending',
+        )
+        DevelopmentPlan.objects.create(
+            skill_matrix=self.employee, skill=self.skill, action='Take a course', status='not_started',
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.post(
+            reverse('employee_skill_update', args=[self.employee.id]),
+            {'skill_id': self.skill.id, 'actual_level': 4},
+        )
+        self.assertEqual(response.status_code, 200)
+        es = EmployeeSkill.objects.get(skill_matrix=self.employee, skill=self.skill)
+        self.assertEqual(es.actual_level, 4)
+        self.assertEqual(es.rating_status, 'pending')
+
+    def test_cancelled_development_plan_does_not_block_approval(self):
+        EmployeeSkill.objects.create(
+            skill_matrix=self.employee, skill=self.skill, actual_level=2,
+            self_rated_level=4, rating_status='pending',
+        )
+        DevelopmentPlan.objects.create(
+            skill_matrix=self.employee, skill=self.skill, action='Take a course', status='cancelled',
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.post(reverse('employee_skill_approve', args=[self.employee.id, self.skill.id]))
+        self.assertEqual(response.status_code, 200)
+        es = EmployeeSkill.objects.get(skill_matrix=self.employee, skill=self.skill)
+        self.assertEqual(es.rating_status, 'approved')
+
+    def test_has_active_development_plan_false_when_no_plan_exists(self):
+        es = EmployeeSkill.objects.create(skill_matrix=self.employee, skill=self.skill, actual_level=2)
+        self.assertFalse(es.has_active_development_plan)
+
+    def test_profile_page_shows_blocked_state_for_approve_button(self):
+        EmployeeSkill.objects.create(
+            skill_matrix=self.employee, skill=self.skill, actual_level=2,
+            self_rated_level=4, rating_status='pending',
+        )
+        DevelopmentPlan.objects.create(
+            skill_matrix=self.employee, skill=self.skill, action='Take a course', status='in_progress',
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.get(reverse('employee_profile', args=[self.employee.id]))
+        self.assertContains(response, 'Blocked')
+        self.assertContains(response, 'disabled')
+
 
 class RoleMatrixQuerysetTests(TestCase):
     """get_required_benchmarks()/get_missing_benchmarks() must always return a QuerySet,

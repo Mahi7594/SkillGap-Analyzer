@@ -640,6 +640,7 @@ class SkillMatrixProfileView(LoginRequiredMixin, DetailView):
                 'self_rated_level': emp_skill.self_rated_level if emp_skill else None,
                 'rating_status': emp_skill.rating_status if emp_skill else 'none',
                 'rating_gap': emp_skill.rating_gap if emp_skill else None,
+                'has_active_development_plan': emp_skill.has_active_development_plan if emp_skill else False,
             })
         
         # Sort by gap (critical first)
@@ -685,7 +686,14 @@ def employee_skill_update(request, pk):
             )
 
             if emp_skill.self_rated_level is not None:
-                emp_skill.rating_status = 'approved' if actual_level == emp_skill.self_rated_level else 'overridden'
+                if actual_level != emp_skill.self_rated_level:
+                    emp_skill.rating_status = 'overridden'
+                elif emp_skill.has_active_development_plan:
+                    # Matches the self-rating, but an open development plan means the gap
+                    # it was raised for isn't validated yet — leave it pending review.
+                    emp_skill.rating_status = 'pending'
+                else:
+                    emp_skill.rating_status = 'approved'
                 emp_skill.save(update_fields=['rating_status'])
 
             benchmark = SkillBenchmark.objects.filter(role_matrix=skill_matrix.role_matrix, skill=skill).first()
@@ -746,6 +754,11 @@ def employee_skill_approve(request, pk, skill_id):
     if request.method == 'POST':
         emp_skill = get_object_or_404(EmployeeSkill, skill_matrix=skill_matrix, skill_id=skill_id)
         if emp_skill.self_rated_level is not None:
+            if emp_skill.has_active_development_plan:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'This skill has an active development plan. Mark it Completed before approving the self-rating.',
+                }, status=409)
             emp_skill.actual_level = emp_skill.self_rated_level
             emp_skill.rating_status = 'approved'
             emp_skill.save()
