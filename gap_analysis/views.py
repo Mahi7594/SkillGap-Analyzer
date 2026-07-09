@@ -8,7 +8,7 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden
 import json
 
 from .forms import (
@@ -20,6 +20,8 @@ from .models import (
     RoleMatrix, SkillBenchmark, SkillMatrix, EmployeeSkill, Skill, DevelopmentPlan,
     gap_weight, user_can_manage_employee,
 )
+from .reports import build_team_report_data
+from .exports import render_team_report_excel, render_team_report_pdf
 
 
 def safe_json(data):
@@ -472,8 +474,26 @@ def employee_export_csv(request):
             round(avg_gap, 1),
             f"{skills_met}%"
         ])
-    
+
     return response
+
+
+@login_required
+def team_report_excel(request):
+    """Staff-only: whole-team skill matrix + dashboard, as a downloadable .xlsx."""
+    if not request.user.is_staff:
+        return HttpResponseForbidden("Staff access required.")
+    report_data = build_team_report_data(SkillMatrix.objects.all())
+    return render_team_report_excel(report_data)
+
+
+@login_required
+def team_report_pdf(request):
+    """Staff-only: whole-team skill matrix + dashboard, as a downloadable .pdf."""
+    if not request.user.is_staff:
+        return HttpResponseForbidden("Staff access required.")
+    report_data = build_team_report_data(SkillMatrix.objects.all())
+    return render_team_report_pdf(report_data)
 
 
 class BulkSkillUpdateView(LoginRequiredMixin, StaffRequiredMixin, TemplateView):

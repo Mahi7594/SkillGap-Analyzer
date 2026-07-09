@@ -15,6 +15,8 @@ urlpatterns = [
     # Employee URLs
     path('employees/', views.SkillMatrixListView.as_view(), name='employee_list'),
     path('employees/export/', views.employee_export_csv, name='employee_export'),
+    path('employees/export/team-report.xlsx', views.team_report_excel, name='team_report_excel'),
+    path('employees/export/team-report.pdf', views.team_report_pdf, name='team_report_pdf'),
     path('employee/<int:pk>/', views.SkillMatrixProfileView.as_view(), name='employee_profile'),
     path('employee/<int:pk>/edit/', views.SkillMatrixUpdateView.as_view(), name='employee_update'),
     path('employee/<int:pk>/delete/', views.SkillMatrixDeleteView.as_view(), name='employee_delete'),

@@ -10,6 +10,7 @@ from .models import (
     DevelopmentPlan, user_can_manage_employee,
 )
 from .views import safe_json
+from .reports import build_team_report_data
 
 
 class GapScoringTests(TestCase):
@@ -437,3 +438,94 @@ class MalformedInputTests(TestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.assertFalse(EmployeeSkill.objects.filter(skill_matrix=self.employee, skill=self.skill).exists())
+
+
+class TeamReportDataTests(TestCase):
+    def setUp(self):
+        self.role = RoleMatrix.objects.create(title='Engineer')
+        self.other_role = RoleMatrix.objects.create(title='Manager')
+        self.mandatory_skill = Skill.objects.create(name='Python')
+        self.other_role_only_skill = Skill.objects.create(name='Leadership')
+
+        SkillBenchmark.objects.create(role_matrix=self.role, skill=self.mandatory_skill, required_level=4, is_mandatory=True)
+        SkillBenchmark.objects.create(role_matrix=self.other_role, skill=self.other_role_only_skill, required_level=3, is_mandatory=False)
+
+        self.engineer = SkillMatrix.objects.create(name='Ada Lovelace', role_matrix=self.role)
+        EmployeeSkill.objects.create(skill_matrix=self.engineer, skill=self.mandatory_skill, actual_level=1)  # gap 3
+
+        self.manager = SkillMatrix.objects.create(name='Grace Hopper', role_matrix=self.other_role)
+        EmployeeSkill.objects.create(skill_matrix=self.manager, skill=self.other_role_only_skill, actual_level=3)  # gap 0
+
+    def test_matrix_includes_union_of_skills_across_roles(self):
+        data = build_team_report_data(SkillMatrix.objects.all())
+        skill_names = {s.name for s in data['skills']}
+        self.assertEqual(skill_names, {'Python', 'Leadership'})
+
+    def test_skill_not_benchmarked_for_a_role_is_marked_not_applicable(self):
+        data = build_team_report_data(SkillMatrix.objects.all())
+        cell = data['matrix'][(self.manager.id, self.mandatory_skill.id)]
+        self.assertFalse(cell['applicable'])
+
+    def test_applicable_cell_has_correct_actual_and_required(self):
+        data = build_team_report_data(SkillMatrix.objects.all())
+        cell = data['matrix'][(self.engineer.id, self.mandatory_skill.id)]
+        self.assertEqual(cell, {
+            'applicable': True, 'required': 4, 'actual': 1, 'gap': 3,
+            'status': 'critical', 'is_mandatory': True,
+        })
+
+    def test_summary_totals_match_both_employees(self):
+        data = build_team_report_data(SkillMatrix.objects.all())
+        self.assertEqual(data['summary']['total_employees'], 2)
+        self.assertEqual(data['summary']['total_skills'], 2)
+        self.assertEqual(data['summary']['skills_met_pct'], 50)  # 1 of 2 comparisons met
+
+    def test_gap_by_employee_only_includes_employees_with_benchmarks(self):
+        unbenched = SkillMatrix.objects.create(name='No Role')
+        data = build_team_report_data(SkillMatrix.objects.all())
+        names = {e['name'] for e in data['gap_by_employee']}
+        self.assertIn('Ada Lovelace', names)
+        self.assertNotIn(unbenched.name, names)
+
+
+class TeamReportExportViewTests(TestCase):
+    def setUp(self):
+        self.staff_user = User.objects.create_user('hr_admin6', password='pass12345', is_staff=True)
+        self.plain_user = User.objects.create_user('plain6', password='pass12345')
+        role = RoleMatrix.objects.create(title='Engineer')
+        skill = Skill.objects.create(name='Python')
+        SkillBenchmark.objects.create(role_matrix=role, skill=skill, required_level=4)
+        employee = SkillMatrix.objects.create(name='Ada Lovelace', role_matrix=role)
+        EmployeeSkill.objects.create(skill_matrix=employee, skill=skill, actual_level=2)
+
+    def test_anonymous_redirected_from_both_exports(self):
+        self.assertEqual(self.client.get(reverse('team_report_excel')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('team_report_pdf')).status_code, 302)
+
+    def test_non_staff_forbidden_from_both_exports(self):
+        self.client.force_login(self.plain_user)
+        self.assertEqual(self.client.get(reverse('team_report_excel')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('team_report_pdf')).status_code, 403)
+
+    def test_staff_gets_a_valid_excel_file(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('team_report_excel'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response['Content-Type'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        from openpyxl import load_workbook
+        from io import BytesIO
+        wb = load_workbook(BytesIO(response.content))
+        self.assertEqual(wb.sheetnames, ['Dashboard', 'Skill Matrix'])
+        self.assertEqual(wb['Skill Matrix']['A1'].value, 'Skill')
+        self.assertEqual(wb['Skill Matrix']['C1'].value, 'Ada Lovelace')
+
+    def test_staff_gets_a_valid_pdf_file(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('team_report_pdf'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertTrue(response.content.startswith(b'%PDF'))
+        self.assertGreater(len(response.content), 500)
